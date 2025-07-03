@@ -1,6 +1,6 @@
 {
     "name": "@theunwalked/unplayable",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "A cross-platform audio recording and processing library extracted from KodrDriv",
     "type": "module",
     "main": "./dist/unplayable.cjs",
