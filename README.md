@@ -1,6 +1,6 @@
 # Unplayable
 
-A cross-platform audio recording and processing library extracted from KodrDriv, designed to be easily integrated into other projects.
+A cross-platform audio recording and processing library, designed to be easily integrated into other projects.
 
 ## Features
 
@@ -571,7 +571,6 @@ This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENS
 
 ## Acknowledgments
 
-- Extracted and adapted from [KodrDriv](https://github.com/calenvarek/kodrdriv)
 - Built with the same patterns as [CardiganTime](https://github.com/SemicolonAmbulance/cardigantime)
 - Uses [OpenAI Whisper](https://openai.com/research/whisper) for speech-to-text
 - Powered by [FFmpeg](https://ffmpeg.org/) for audio processing
@@ -580,4 +579,3 @@ This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENS
 
 - **[CardiganTime](https://github.com/SemicolonAmbulance/cardigantime)** - Configuration management library
 - **[DreadCabinet](https://github.com/SemicolonAmbulance/dreadcabinet)** - File organization tool
-- **[KodrDriv](https://github.com/calenvarek/kodrdriv)** - Original project containing the audio functionality 
