@@ -575,7 +575,7 @@ This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENS
 - Uses [OpenAI Whisper](https://openai.com/research/whisper) for speech-to-text
 - Powered by [FFmpeg](https://ffmpeg.org/) for audio processing
 
-## Related Projects
+## Related Libraries
 
 - **[CardiganTime](https://github.com/SemicolonAmbulance/cardigantime)** - Configuration management library
 - **[DreadCabinet](https://github.com/SemicolonAmbulance/dreadcabinet)** - File organization tool
