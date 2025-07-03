@@ -7,6 +7,13 @@ import { AudioDeviceError } from './error';
 import { run } from './util/child';
 
 /**
+ * Get ffmpeg command path from environment or default
+ */
+const getFFmpegPath = (): string => {
+    return process.env.FFMPEG_PATH || '/opt/homebrew/bin/ffmpeg';
+};
+
+/**
  * Detects the best available audio device for recording
  * @param logger Optional logger for debugging
  * @returns Promise resolving to audio device index as string
@@ -22,7 +29,8 @@ export const detectBestAudioDevice = async (logger?: Logger): Promise<string> =>
 
         // Fallback to preference-based detection if format testing fails
         try {
-            const result = await run('ffmpeg', ['-f', 'avfoundation', '-list_devices', 'true', '-i', '""'], {
+            const ffmpegPath = getFFmpegPath();
+            const result = await run(ffmpegPath, ['-f', 'avfoundation', '-list_devices', 'true', '-i', '""'], {
                 logger,
                 timeout: 10000
             });
@@ -79,7 +87,8 @@ export const detectBestAudioDevice = async (logger?: Logger): Promise<string> =>
  */
 export const parseAudioDevices = async (logger?: Logger): Promise<AudioDevice[]> => {
     try {
-        const result = await run('ffmpeg', ['-f', 'avfoundation', '-list_devices', 'true', '-i', '""'], {
+        const ffmpegPath = getFFmpegPath();
+        const result = await run(ffmpegPath, ['-f', 'avfoundation', '-list_devices', 'true', '-i', '""'], {
             logger,
             timeout: 10000
         });
@@ -136,7 +145,8 @@ export const validateAudioDevice = async (deviceIndex: string, logger?: Logger):
 
         // Test if we can access the device by attempting a short recording test
         try {
-            const testResult = await run('ffmpeg', [
+            const ffmpegPath = getFFmpegPath();
+            const testResult = await run(ffmpegPath, [
                 '-f', 'avfoundation',
                 '-i', `:${deviceIndex}`,
                 '-t', '0.1',
@@ -175,7 +185,8 @@ export const getAudioDeviceInfo = async (deviceIndex: string, logger?: Logger): 
 
         // Get detailed device information
         try {
-            const infoResult = await run('ffmpeg', [
+            const ffmpegPath = getFFmpegPath();
+            const infoResult = await run(ffmpegPath, [
                 '-f', 'avfoundation',
                 '-list_devices', 'true',
                 '-i', `:${deviceIndex}`
