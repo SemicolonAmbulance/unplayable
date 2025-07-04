@@ -65,16 +65,8 @@ function App() {
 
     const getLogoPath = (sectionId: string): string => {
         switch (sectionId) {
-            case 'integration-examples':
-                return '/unplayable/unplayable-integration.png'
-            case 'audio-formats':
-                return '/unplayable/unplayable-audio.png'
-            case 'error-handling':
-                return '/unplayable/unplayable-error.png'
-            case 'development':
-                return '/unplayable/unplayable-dev.png'
             default:
-                return '/unplayable/unplayable-icon.png'
+                return '/unplayable/unplayable-image.png'
         }
     }
 
