@@ -109,7 +109,12 @@ vi.mock('../src/devices', () => {
             audioDevice: '1',
             audioDeviceName: 'MacBook Pro Microphone'
         }),
-        audioDeviceConfigExists: vi.fn().mockResolvedValue(true)
+        audioDeviceConfigExists: vi.fn().mockResolvedValue(true),
+        selectAudioDeviceInteractively: vi.fn().mockResolvedValue({
+            index: '1',
+            name: 'MacBook Pro Microphone'
+        }),
+        selectAndConfigureAudioDevice: vi.fn().mockResolvedValue('1')
     };
 });
 
@@ -438,6 +443,69 @@ describe('Unplayable Library', () => {
 
             expect(deviceConfig).toBeNull();
         });
+
+        it('should interactively select audio device', async () => {
+            const { selectAudioDeviceInteractively } = await import('../src/devices');
+            vi.mocked(selectAudioDeviceInteractively).mockResolvedValue({
+                index: '1',
+                name: 'MacBook Pro Microphone'
+            });
+
+            const unplayable = await createUnplayable();
+            const selectedDevice = await unplayable.selectAudioDevice();
+
+            expect(selectedDevice).toEqual({
+                index: '1',
+                name: 'MacBook Pro Microphone'
+            });
+        });
+
+        it('should return null when no device is selected interactively', async () => {
+            const { selectAudioDeviceInteractively } = await import('../src/devices');
+            vi.mocked(selectAudioDeviceInteractively).mockResolvedValue(null);
+
+            const unplayable = await createUnplayable();
+            const selectedDevice = await unplayable.selectAudioDevice();
+
+            expect(selectedDevice).toBeNull();
+        });
+
+        it('should select and configure audio device', async () => {
+            const { selectAndConfigureAudioDevice } = await import('../src/devices');
+            vi.mocked(selectAndConfigureAudioDevice).mockResolvedValue('1');
+
+            const unplayable = await createUnplayable();
+            const deviceIndex = await unplayable.selectAndConfigureDevice();
+
+            expect(deviceIndex).toBe('1');
+        });
+
+        it('should select and configure audio device with debug mode', async () => {
+            const { selectAndConfigureAudioDevice } = await import('../src/devices');
+            vi.mocked(selectAndConfigureAudioDevice).mockResolvedValue('1');
+
+            const unplayable = await createUnplayable();
+            const deviceIndex = await unplayable.selectAndConfigureDevice(true);
+
+            expect(deviceIndex).toBe('1');
+        });
+
+        it('should throw error when selecting and configuring device without preferences directory', async () => {
+            // Mock config manager to return null for preferencesDirectory
+            const configMock = await import('../src/configuration');
+            vi.mocked(configMock.loadConfiguration).mockResolvedValue({
+                get: vi.fn((key: string) => key === 'preferencesDirectory' ? null : '/tmp/output'),
+                getConfig: vi.fn(() => ({ outputDirectory: '/tmp/output' })),
+                updateConfig: vi.fn(),
+                saveToFile: vi.fn(),
+                saveToDefaultLocation: vi.fn(),
+                exportConfig: vi.fn(() => '{}')
+            } as any);
+
+            const unplayable = await createUnplayable();
+
+            await expect(unplayable.selectAndConfigureDevice()).rejects.toThrow('No preferences directory configured');
+        });
     });
 
     describe('File Validation', () => {
@@ -674,6 +742,195 @@ describe('Unplayable Library', () => {
 
             expect(unplayable.isSupportedAudioFile('my.audio.file.mp3')).toBe(true);
             expect(unplayable.isSupportedAudioFile('complex.file.name.wav')).toBe(true);
+        });
+    });
+
+    describe('Default Export', () => {
+        it('should export default object with all convenience functions', async () => {
+            const unplayableDefault = await import('../src/unplayable');
+            const defaultExport = unplayableDefault.default;
+
+            expect(defaultExport).toBeDefined();
+            expect(typeof defaultExport.createUnplayable).toBe('function');
+            expect(typeof defaultExport.processAudio).toBe('function');
+            expect(typeof defaultExport.recordAudio).toBe('function');
+            expect(typeof defaultExport.transcribeFile).toBe('function');
+            expect(typeof defaultExport.getAudioDevices).toBe('function');
+        });
+
+        it('should execute default export functions', async () => {
+            // Ensure device mocks are properly set up for convenience functions
+            const { listAudioDevices } = await import('../src/devices');
+            vi.mocked(listAudioDevices).mockResolvedValue([
+                { index: '0', name: 'Built-in Microphone' },
+                { index: '1', name: 'MacBook Pro Microphone' }
+            ]);
+
+            const unplayableDefault = await import('../src/unplayable');
+            const defaultExport = unplayableDefault.default;
+
+            // Test that the default export functions actually work
+            const unplayable = await defaultExport.createUnplayable();
+            expect(unplayable).toBeDefined();
+
+            const devices = await defaultExport.getAudioDevices();
+            expect(Array.isArray(devices)).toBe(true);
+
+            const audioFilePath = await defaultExport.recordAudio({ maxRecordingTime: 10 });
+            expect(typeof audioFilePath).toBe('string');
+
+            const transcript = await defaultExport.transcribeFile('/path/to/audio.wav');
+            expect(typeof transcript).toBe('string');
+
+            const result = await defaultExport.processAudio({ dryRun: true });
+            expect(result).toBeDefined();
+        });
+    });
+
+    describe('Additional Edge Cases and Error Scenarios', () => {
+        it('should handle processAudio with all options provided', async () => {
+            const unplayable = await createUnplayable();
+
+            const fullOptions = {
+                file: '/path/to/audio.wav',
+                outputDirectory: '/custom/output',
+                preferencesDirectory: '/custom/preferences',
+                maxRecordingTime: 60,
+                dryRun: false,
+                logger: {
+                    error: vi.fn(),
+                    warn: vi.fn(),
+                    info: vi.fn(),
+                    debug: vi.fn(),
+                    verbose: vi.fn()
+                }
+            };
+
+            const result = await unplayable.processAudio(fullOptions);
+
+            expect(result).toBeDefined();
+            expect(result.transcript).toBe('Test transcript');
+        });
+
+        it('should handle device selection errors gracefully', async () => {
+            const { selectAudioDeviceInteractively } = await import('../src/devices');
+            vi.mocked(selectAudioDeviceInteractively).mockRejectedValue(new Error('Device selection failed'));
+
+            const unplayable = await createUnplayable();
+
+            await expect(unplayable.selectAudioDevice()).rejects.toThrow('Device selection failed');
+        });
+
+        it('should handle device configuration errors gracefully', async () => {
+            const { selectAndConfigureAudioDevice } = await import('../src/devices');
+            vi.mocked(selectAndConfigureAudioDevice).mockRejectedValue(new Error('Device configuration failed'));
+
+            const unplayable = await createUnplayable();
+
+            await expect(unplayable.selectAndConfigureDevice()).rejects.toThrow('Device configuration failed');
+        });
+
+        it('should handle transcription with empty options', async () => {
+            const unplayable = await createUnplayable();
+
+            const transcript = await unplayable.transcribeFile('/path/to/audio.wav', {});
+
+            expect(transcript).toBe('Test transcript');
+        });
+
+        it('should handle logger creation with different levels', async () => {
+            const unplayable1 = await createUnplayable({ config: { logging: { level: 'debug' } } });
+            const unplayable2 = await createUnplayable({ config: { logging: { level: 'error' } } });
+            const unplayable3 = await createUnplayable({ config: { logging: { silent: true } } });
+
+            expect(unplayable1.getLogger()).toBeDefined();
+            expect(unplayable2.getLogger()).toBeDefined();
+            expect(unplayable3.getLogger()).toBeDefined();
+        });
+
+        it('should handle processAudio with undefined options', async () => {
+            const unplayable = await createUnplayable();
+
+            const result = await unplayable.processAudio(undefined);
+
+            expect(result).toBeDefined();
+            expect(result.transcript).toBe('Test transcript');
+        });
+
+        it('should handle recordAudio with undefined options', async () => {
+            const unplayable = await createUnplayable();
+
+            const audioFilePath = await unplayable.recordAudio(undefined);
+
+            expect(typeof audioFilePath).toBe('string');
+        });
+
+        it('should handle case where processAudio returns empty transcript', async () => {
+            // Mock the processor to return empty transcript
+            const { createAudioProcessor } = await import('../src/processor');
+            vi.mocked(createAudioProcessor).mockReturnValueOnce({
+                processAudio: vi.fn().mockResolvedValue({
+                    transcript: '',
+                    audioFilePath: '/path/to/audio.wav',
+                    cancelled: false,
+                    metadata: { processingTime: 1000 }
+                })
+            } as any);
+
+            const unplayable = await createUnplayable();
+            const transcript = await unplayable.transcribeFile('/path/to/audio.wav');
+
+            expect(transcript).toBe('');
+        });
+
+        it('should handle file validation with special characters', async () => {
+            const unplayable = await createUnplayable();
+
+            // Test various edge cases for file extensions
+            expect(unplayable.isSupportedAudioFile('file with spaces.mp3')).toBe(true);
+            expect(unplayable.isSupportedAudioFile('file-with-dashes.wav')).toBe(true);
+            expect(unplayable.isSupportedAudioFile('file_with_underscores.flac')).toBe(true);
+            expect(unplayable.isSupportedAudioFile('file(with)parentheses.aac')).toBe(true);
+            expect(unplayable.isSupportedAudioFile('file[with]brackets.m4a')).toBe(true);
+        });
+
+        it('should handle configuration updates with nested objects', async () => {
+            const unplayable = await createUnplayable();
+
+            // Test updating nested configuration
+            unplayable.updateConfig({
+                openai: {
+                    apiKey: 'test-key',
+                    model: 'gpt-4'
+                },
+                logging: {
+                    level: 'debug'
+                }
+            });
+
+            // Since config updates are mocked, we just verify it doesn't throw
+            expect(() => unplayable.updateConfig({
+                openai: { apiKey: 'new-key' }
+            })).not.toThrow();
+        });
+
+        it('should handle edge case where config methods return undefined', async () => {
+            // Test configuration edge cases
+            const configMock = await import('../src/configuration');
+            vi.mocked(configMock.loadConfiguration).mockResolvedValue({
+                get: vi.fn(() => undefined),
+                getConfig: vi.fn(() => ({})),
+                updateConfig: vi.fn(),
+                saveToFile: vi.fn(),
+                saveToDefaultLocation: vi.fn(),
+                exportConfig: vi.fn(() => '{}')
+            } as any);
+
+            const unplayable = await createUnplayable();
+
+            // Should handle undefined config values gracefully
+            const result = await unplayable.processAudio({ dryRun: true });
+            expect(result).toBeDefined();
         });
     });
 }); 
