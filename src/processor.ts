@@ -26,7 +26,7 @@ import { run } from './util/child';
 import { ConfigurationManager } from './configuration';
 
 /**
- * Main audio processor class that handles recording, processing, and transcription
+ * Main audio processor class that handles recording, processing
  */
 export class AudioProcessor {
     private readonly logger?: Logger;
@@ -63,7 +63,7 @@ export class AudioProcessor {
 
             const result = options.file
                 ? await this.processAudioFile(options.file, options)
-                : await this.recordAndTranscribeAudio(options);
+                : await this.record(options);
 
             // Add processing metadata
             result.metadata = {
@@ -81,6 +81,7 @@ export class AudioProcessor {
     /**
      * Process an existing audio file
      */
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     private async processAudioFile(filePath: string, options: AudioProcessingOptions): Promise<AudioProcessingResult> {
         this.logger?.info(`🎯 Processing audio file: ${filePath}`);
 
@@ -94,46 +95,17 @@ export class AudioProcessor {
             format: path.extname(filePath).slice(1).toLowerCase()
         };
 
-        // Transcribe the audio
-        this.logger?.info('🎯 Transcribing audio...');
-        this.logger?.info('⏳ This may take a few seconds depending on audio length...');
-
-        const transcription = await this.transcribeAudio(filePath);
-
-        this.logger?.info('✅ Audio transcribed successfully');
-        this.logger?.debug(`Transcription: ${transcription}`);
-
-        // Save transcript to output directory
-        let transcriptFilePath: string | undefined;
-        if (options.outputDirectory) {
-            transcriptFilePath = await this.saveTranscript(transcription, filePath, options.outputDirectory);
-        }
-
-        if (!transcription.trim()) {
-            this.logger?.warn('No audio content was transcribed.');
-            return {
-                transcript: '',
-                audioFilePath: filePath,
-                transcriptFilePath,
-                cancelled: false,
-                metadata
-            };
-        }
-
-        this.logger?.info('📝 Audio transcribed successfully');
         return {
-            transcript: transcription,
             audioFilePath: filePath,
-            transcriptFilePath,
             cancelled: false,
             metadata
         };
     }
 
     /**
-     * Record and transcribe new audio
+     * Record  new audio
      */
-    private async recordAndTranscribeAudio(options: AudioProcessingOptions): Promise<AudioProcessingResult> {
+    private async record(options: AudioProcessingOptions): Promise<AudioProcessingResult> {
         this.logger?.info('🎙️ Starting audio recording...');
 
         // Get audio device configuration
@@ -155,7 +127,6 @@ export class AudioProcessor {
 
             if (recordingResult.cancelled) {
                 return {
-                    transcript: '',
                     cancelled: true
                 };
             }
@@ -170,12 +141,8 @@ export class AudioProcessor {
                 format: 'wav'
             };
 
-            // Transcribe the recorded audio
-            this.logger?.info('🎯 Transcribing recorded audio...');
-            const transcription = await this.transcribeAudio(tempAudioPath);
 
             let finalAudioPath: string | undefined;
-            let transcriptFilePath: string | undefined;
 
             // Save files to output directory if specified
             if (options.outputDirectory) {
@@ -188,9 +155,6 @@ export class AudioProcessor {
                     this.storage
                 );
                 await this.storage.copyFile(tempAudioPath, finalAudioPath);
-
-                // Save transcript
-                transcriptFilePath = await this.saveTranscript(transcription, finalAudioPath, options.outputDirectory);
             }
 
             // Cleanup temp directory unless keepTemp is specified
@@ -202,9 +166,7 @@ export class AudioProcessor {
 
             this.logger?.info('✅ Recording and transcription completed successfully');
             return {
-                transcript: transcription,
                 audioFilePath: finalAudioPath,
-                transcriptFilePath,
                 cancelled: false,
                 metadata
             };
@@ -268,34 +230,6 @@ export class AudioProcessor {
         }
     }
 
-    /**
-     * Transcribe audio using OpenAI Whisper (placeholder - requires OpenAI SDK)
-     */
-    private async transcribeAudio(audioFilePath: string): Promise<string> {
-        // This is a simplified version - in the full implementation, this would use the OpenAI SDK
-        this.logger?.debug(`Transcribing audio file: ${audioFilePath}`);
-
-        // For now, return a placeholder
-        // TODO: Implement actual OpenAI Whisper transcription
-        return `[Transcription placeholder for: ${path.basename(audioFilePath)}]`;
-    }
-
-    /**
-     * Save transcript to file
-     */
-    private async saveTranscript(transcript: string, audioFilePath: string, outputDir: string): Promise<string> {
-        const audioBaseName = path.basename(audioFilePath, path.extname(audioFilePath));
-        const transcriptFileName = `${audioBaseName}-transcript.txt`;
-        const transcriptPath = await generateUniqueFilename(
-            path.join(outputDir, transcriptFileName),
-            this.storage
-        );
-
-        await this.storage.writeFile(transcriptPath, transcript);
-        this.logger?.info(`📄 Transcript saved: ${transcriptPath}`);
-
-        return transcriptPath;
-    }
 
     /**
      * Get audio device configuration
@@ -374,7 +308,6 @@ export class AudioProcessor {
         this.logger?.info('DRY RUN: Would transcribe audio and return transcript');
 
         return {
-            transcript: '[DRY RUN] Transcription would appear here',
             cancelled: false,
             metadata: {
                 processingTime: 0
