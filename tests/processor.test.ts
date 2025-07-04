@@ -146,7 +146,6 @@ describe('AudioProcessor', () => {
                 const result = await processor.processAudio(options);
 
                 expect(result).toEqual({
-                    transcript: '[DRY RUN] Transcription would appear here',
                     cancelled: false,
                     metadata: {
                         processingTime: 0
@@ -165,7 +164,6 @@ describe('AudioProcessor', () => {
                 const result = await processor.processAudio(options);
 
                 expect(result).toEqual({
-                    transcript: '[DRY RUN] Transcription would appear here',
                     cancelled: false,
                     metadata: {
                         processingTime: 0
@@ -191,50 +189,13 @@ describe('AudioProcessor', () => {
                 const result = await processor.processAudio(options);
 
                 expect(validateAudioFile).toHaveBeenCalledWith('/test/audio.wav', mockLogger);
-                expect(result.transcript).toBe('[Transcription placeholder for: audio.wav]');
                 expect(result.audioFilePath).toBe('/test/audio.wav');
-                expect(result.transcriptFilePath).toBe('/test/output/audio-transcript.txt');
                 expect(result.cancelled).toBe(false);
                 expect(result.metadata).toEqual({
                     fileSize: 1024,
                     format: 'wav',
                     processingTime: expect.any(Number)
                 });
-            });
-
-            it('should handle empty transcript', async () => {
-                const options: AudioProcessingOptions = {
-                    file: '/test/audio.wav'
-                };
-
-                const mockStats = { size: 1024 };
-                mockStorage.getFileStats.mockResolvedValue(mockStats);
-                validateAudioFile.mockResolvedValue(undefined);
-
-                // Mock transcribeAudio to return empty string
-                const processor = new AudioProcessor(mockLogger);
-                vi.spyOn(processor as any, 'transcribeAudio').mockResolvedValue('');
-
-                const result = await processor.processAudio(options);
-
-                expect(result.transcript).toBe('');
-                expect(result.cancelled).toBe(false);
-                expect(mockLogger.warn).toHaveBeenCalledWith('No audio content was transcribed.');
-            });
-
-            it('should process file without output directory', async () => {
-                const options: AudioProcessingOptions = {
-                    file: '/test/audio.wav'
-                };
-
-                const mockStats = { size: 1024 };
-                mockStorage.getFileStats.mockResolvedValue(mockStats);
-                validateAudioFile.mockResolvedValue(undefined);
-
-                const result = await processor.processAudio(options);
-
-                expect(result.transcriptFilePath).toBeUndefined();
-                expect(result.transcript).toBe('[Transcription placeholder for: audio.wav]');
             });
         });
 
@@ -263,7 +224,6 @@ describe('AudioProcessor', () => {
 
                 const result = await processor.processAudio(options);
 
-                expect(result.transcript).toBe('[Transcription placeholder for: recording-123.wav]');
                 expect(result.audioFilePath).toBe('/test/output/recording-456.wav');
                 expect(result.cancelled).toBe(false);
                 expect(result.metadata?.fileSize).toBe(2048);
@@ -288,7 +248,6 @@ describe('AudioProcessor', () => {
 
                 const result = await processor.processAudio(options);
 
-                expect(result.transcript).toBe('');
                 expect(result.cancelled).toBe(true);
             });
 
@@ -533,33 +492,6 @@ describe('AudioProcessor', () => {
         });
     });
 
-    describe('transcript saving', () => {
-        it('should save transcript to unique filename', async () => {
-            const options: AudioProcessingOptions = {
-                file: '/test/audio.wav',
-                outputDirectory: '/test/output'
-            };
-
-            const mockStats = { size: 1024 };
-            mockStorage.getFileStats.mockResolvedValue(mockStats);
-            validateAudioFile.mockResolvedValue(undefined);
-            generateUniqueFilename.mockResolvedValue('/test/output/audio-transcript-1.txt');
-
-            const result = await processor.processAudio(options);
-
-            expect(generateUniqueFilename).toHaveBeenCalledWith(
-                '/test/output/audio-transcript.txt',
-                mockStorage
-            );
-            expect(mockStorage.writeFile).toHaveBeenCalledWith(
-                '/test/output/audio-transcript-1.txt',
-                '[Transcription placeholder for: audio.wav]'
-            );
-            expect(result.transcriptFilePath).toBe('/test/output/audio-transcript-1.txt');
-            expect(mockLogger.info).toHaveBeenCalledWith('📄 Transcript saved: /test/output/audio-transcript-1.txt');
-        });
-    });
-
     describe('temporary directory management', () => {
         it('should create unique temp directory', async () => {
             const options: AudioProcessingOptions = {
@@ -621,21 +553,6 @@ describe('AudioProcessor', () => {
     });
 
     describe('logging behavior', () => {
-        it('should work without logger', async () => {
-            const processorWithoutLogger = new AudioProcessor();
-            const options: AudioProcessingOptions = {
-                file: '/test/audio.wav'
-            };
-
-            const mockStats = { size: 1024 };
-            mockStorage.getFileStats.mockResolvedValue(mockStats);
-            validateAudioFile.mockResolvedValue(undefined);
-
-            const result = await processorWithoutLogger.processAudio(options);
-
-            expect(result.transcript).toBe('[Transcription placeholder for: audio.wav]');
-            // Should not throw any errors despite no logger
-        });
 
         it('should log recording progress', async () => {
             const options: AudioProcessingOptions = {

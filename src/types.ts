@@ -55,12 +55,8 @@ export interface AudioProcessingOptions {
  * Result of audio processing operation
  */
 export interface AudioProcessingResult {
-    /** Transcribed text content */
-    transcript: string;
     /** Path to the audio file */
     audioFilePath?: string;
-    /** Path to the transcript file */
-    transcriptFilePath?: string;
     /** Whether the operation was cancelled */
     cancelled: boolean;
     /** Additional metadata about the processing */

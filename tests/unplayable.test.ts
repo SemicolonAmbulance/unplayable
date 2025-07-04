@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { createUnplayable, processAudio, getAudioDevices, recordAudio, transcribeFile } from '../src/unplayable';
+import { createUnplayable, processAudio, getAudioDevices, recordAudio } from '../src/unplayable';
 import { AudioProcessingOptions } from '../src/types';
 
 // Mock external dependencies
@@ -224,7 +224,6 @@ describe('Unplayable Library', () => {
             const result = await unplayable.processAudio(options);
 
             expect(result.cancelled).toBe(false);
-            expect(result.transcript).toBe('Test transcript');
             expect(result.audioFilePath).toBe('/path/to/audio.wav');
         });
 
@@ -247,15 +246,6 @@ describe('Unplayable Library', () => {
 
             await expect(unplayable.processAudio(invalidOptions)).rejects.toThrow('Invalid maxRecordingTime');
         });
-
-        it('should process audio with empty options', async () => {
-            const unplayable = await createUnplayable();
-
-            const result = await unplayable.processAudio();
-
-            expect(result).toBeDefined();
-            expect(result.transcript).toBe('Test transcript');
-        });
     });
 
     describe('Audio Recording', () => {
@@ -276,7 +266,6 @@ describe('Unplayable Library', () => {
 
             // Mock the internal processAudio to simulate a cancelled recording
             vi.spyOn(unplayable, 'processAudio').mockResolvedValueOnce({
-                transcript: '',
                 audioFilePath: undefined,
                 cancelled: true,
                 metadata: undefined
@@ -290,34 +279,12 @@ describe('Unplayable Library', () => {
 
             // Mock the internal processAudio to simulate missing audioFilePath
             vi.spyOn(unplayable, 'processAudio').mockResolvedValueOnce({
-                transcript: 'Test transcript',
                 audioFilePath: undefined,
                 cancelled: false,
                 metadata: undefined
             });
 
             await expect(unplayable.recordAudio()).rejects.toThrow('Recording was cancelled or failed');
-        });
-    });
-
-    describe('Audio Transcription', () => {
-        it('should transcribe existing audio file', async () => {
-            const unplayable = await createUnplayable();
-
-            const transcript = await unplayable.transcribeFile('/path/to/audio.wav');
-
-            expect(typeof transcript).toBe('string');
-            expect(transcript).toBe('Test transcript');
-        });
-
-        it('should transcribe file with additional options', async () => {
-            const unplayable = await createUnplayable();
-
-            const transcript = await unplayable.transcribeFile('/path/to/audio.wav', {
-                outputDirectory: '/custom/output'
-            });
-
-            expect(transcript).toBe('Test transcript');
         });
     });
 
@@ -599,7 +566,6 @@ describe('Unplayable Library', () => {
             const result = await processAudio(options);
 
             expect(result).toBeDefined();
-            expect(result.transcript).toBe('Test transcript');
         });
 
         it('should provide getAudioDevices convenience function', async () => {
@@ -623,21 +589,6 @@ describe('Unplayable Library', () => {
 
             expect(typeof audioFilePath).toBe('string');
             expect(audioFilePath).toBe('/path/to/audio.wav');
-        });
-
-        it('should provide transcribeFile convenience function', async () => {
-            const transcript = await transcribeFile('/path/to/audio.wav');
-
-            expect(typeof transcript).toBe('string');
-            expect(transcript).toBe('Test transcript');
-        });
-
-        it('should provide transcribeFile convenience function with options', async () => {
-            const transcript = await transcribeFile('/path/to/audio.wav', {
-                outputDirectory: '/custom/output'
-            });
-
-            expect(transcript).toBe('Test transcript');
         });
     });
 
@@ -754,7 +705,6 @@ describe('Unplayable Library', () => {
             expect(typeof defaultExport.createUnplayable).toBe('function');
             expect(typeof defaultExport.processAudio).toBe('function');
             expect(typeof defaultExport.recordAudio).toBe('function');
-            expect(typeof defaultExport.transcribeFile).toBe('function');
             expect(typeof defaultExport.getAudioDevices).toBe('function');
         });
 
@@ -779,8 +729,6 @@ describe('Unplayable Library', () => {
             const audioFilePath = await defaultExport.recordAudio({ maxRecordingTime: 10 });
             expect(typeof audioFilePath).toBe('string');
 
-            const transcript = await defaultExport.transcribeFile('/path/to/audio.wav');
-            expect(typeof transcript).toBe('string');
 
             const result = await defaultExport.processAudio({ dryRun: true });
             expect(result).toBeDefined();
@@ -809,7 +757,6 @@ describe('Unplayable Library', () => {
             const result = await unplayable.processAudio(fullOptions);
 
             expect(result).toBeDefined();
-            expect(result.transcript).toBe('Test transcript');
         });
 
         it('should handle device selection errors gracefully', async () => {
@@ -830,14 +777,6 @@ describe('Unplayable Library', () => {
             await expect(unplayable.selectAndConfigureDevice()).rejects.toThrow('Device configuration failed');
         });
 
-        it('should handle transcription with empty options', async () => {
-            const unplayable = await createUnplayable();
-
-            const transcript = await unplayable.transcribeFile('/path/to/audio.wav', {});
-
-            expect(transcript).toBe('Test transcript');
-        });
-
         it('should handle logger creation with different levels', async () => {
             const unplayable1 = await createUnplayable({ config: { logging: { level: 'debug' } } });
             const unplayable2 = await createUnplayable({ config: { logging: { level: 'error' } } });
@@ -848,15 +787,6 @@ describe('Unplayable Library', () => {
             expect(unplayable3.getLogger()).toBeDefined();
         });
 
-        it('should handle processAudio with undefined options', async () => {
-            const unplayable = await createUnplayable();
-
-            const result = await unplayable.processAudio(undefined);
-
-            expect(result).toBeDefined();
-            expect(result.transcript).toBe('Test transcript');
-        });
-
         it('should handle recordAudio with undefined options', async () => {
             const unplayable = await createUnplayable();
 
@@ -865,23 +795,6 @@ describe('Unplayable Library', () => {
             expect(typeof audioFilePath).toBe('string');
         });
 
-        it('should handle case where processAudio returns empty transcript', async () => {
-            // Mock the processor to return empty transcript
-            const { createAudioProcessor } = await import('../src/processor');
-            vi.mocked(createAudioProcessor).mockReturnValueOnce({
-                processAudio: vi.fn().mockResolvedValue({
-                    transcript: '',
-                    audioFilePath: '/path/to/audio.wav',
-                    cancelled: false,
-                    metadata: { processingTime: 1000 }
-                })
-            } as any);
-
-            const unplayable = await createUnplayable();
-            const transcript = await unplayable.transcribeFile('/path/to/audio.wav');
-
-            expect(transcript).toBe('');
-        });
 
         it('should handle file validation with special characters', async () => {
             const unplayable = await createUnplayable();
