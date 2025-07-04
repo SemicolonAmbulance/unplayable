@@ -231,8 +231,8 @@ export const createUnplayable = async (options: UnplayableFactoryOptions = {}): 
     // Load configuration
     const configManager = await loadConfiguration(options.config, logger);
 
-    // Create processor
-    const processor = createAudioProcessor(logger);
+    // Create processor with config access
+    const processor = createAudioProcessor(logger, configManager);
 
     return new Unplayable(processor, configManager, logger);
 };

@@ -23,6 +23,7 @@ import {
 import { validateAudioFile, validateAudioProcessingOptions } from './validation';
 import { createStorage, generateTimestampedFilename, generateUniqueFilename } from './util/storage';
 import { run } from './util/child';
+import { ConfigurationManager } from './configuration';
 
 /**
  * Main audio processor class that handles recording, processing, and transcription
@@ -30,9 +31,11 @@ import { run } from './util/child';
 export class AudioProcessor {
     private readonly logger?: Logger;
     private readonly storage = createStorage();
+    private readonly config?: ConfigurationManager;
 
-    constructor(logger?: Logger) {
+    constructor(logger?: Logger, config?: ConfigurationManager) {
         this.logger = logger;
+        this.config = config;
     }
 
     /**
@@ -240,7 +243,10 @@ export class AudioProcessor {
                 outputPath
             ];
 
-            const result = await run('ffmpeg', ffmpegArgs, {
+            // Use configured ffmpeg path or default to 'ffmpeg'
+            const ffmpegPath = this.config?.get('ffmpeg')?.path || 'ffmpeg';
+
+            const result = await run(ffmpegPath, ffmpegArgs, {
                 logger: this.logger,
                 timeout: (maxTime + 5) * 1000 // Add 5 seconds buffer
             });
@@ -380,6 +386,6 @@ export class AudioProcessor {
 /**
  * Create an AudioProcessor instance
  */
-export const createAudioProcessor = (logger?: Logger): AudioProcessor => {
-    return new AudioProcessor(logger);
+export const createAudioProcessor = (logger?: Logger, config?: ConfigurationManager): AudioProcessor => {
+    return new AudioProcessor(logger, config);
 }; 
