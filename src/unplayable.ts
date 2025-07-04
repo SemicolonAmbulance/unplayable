@@ -68,18 +68,6 @@ export class Unplayable {
     }
 
     /**
-     * Transcribe existing audio file
-     */
-    async transcribeFile(filePath: string, options: Partial<AudioProcessingOptions> = {}): Promise<string> {
-        const result = await this.processAudio({
-            ...options,
-            file: filePath
-        });
-
-        return result.transcript;
-    }
-
-    /**
      * List available audio devices
      */
     async getAudioDevices(): Promise<AudioDevice[]> {
@@ -254,14 +242,6 @@ export const recordAudio = async (options: Partial<AudioProcessingOptions> = {})
 };
 
 /**
- * Convenience function to transcribe a file with minimal setup
- */
-export const transcribeFile = async (filePath: string, options: Partial<AudioProcessingOptions> = {}): Promise<string> => {
-    const unplayable = await createUnplayable();
-    return await unplayable.transcribeFile(filePath, options);
-};
-
-/**
  * Convenience function to list audio devices
  */
 export const getAudioDevices = async (): Promise<AudioDevice[]> => {
@@ -289,6 +269,5 @@ export default {
     createUnplayable,
     processAudio,
     recordAudio,
-    transcribeFile,
     getAudioDevices
 }; 
