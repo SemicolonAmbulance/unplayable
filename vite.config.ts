@@ -1,6 +1,5 @@
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import replace from '@rollup/plugin-replace';
 
 export default defineConfig({
@@ -8,9 +7,6 @@ export default defineConfig({
         dts({
             insertTypesEntry: true,
             rollupTypes: true,
-        }),
-        nodePolyfills({
-            include: ['fs', 'path', 'os', 'crypto'],
         }),
         replace({
             'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
@@ -35,6 +31,7 @@ export default defineConfig({
                 'stream',
                 'events',
                 'util',
+                'process',
                 'audify',
                 'openai',
                 'winston',
@@ -55,6 +52,7 @@ export default defineConfig({
                     'stream': 'stream',
                     'events': 'events',
                     'util': 'util',
+                    'process': 'process',
                     'audify': 'audify',
                     'openai': 'openai',
                     'winston': 'winston',
