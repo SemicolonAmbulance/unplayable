@@ -17,7 +17,9 @@ import {
     validateAudioDevice,
     getAudioDeviceInfo,
     saveAudioDeviceConfig,
-    loadAudioDeviceConfig
+    loadAudioDeviceConfig,
+    selectAudioDeviceInteractively,
+    selectAndConfigureAudioDevice
 } from './devices';
 import { validateAudioFile, hasSupportedAudioExtension } from './validation';
 
@@ -125,6 +127,24 @@ export class Unplayable {
             return null;
         }
         return await loadAudioDeviceConfig(preferencesDir, this.logger);
+    }
+
+    /**
+     * Interactively select an audio device
+     */
+    async selectAudioDevice(): Promise<AudioDevice | null> {
+        return await selectAudioDeviceInteractively(this.logger);
+    }
+
+    /**
+     * Select and configure an audio device (high-level method)
+     */
+    async selectAndConfigureDevice(debug: boolean = false): Promise<string> {
+        const preferencesDir = this.config.get('preferencesDirectory');
+        if (!preferencesDir) {
+            throw new Error('No preferences directory configured');
+        }
+        return await selectAndConfigureAudioDevice(preferencesDir, this.logger, debug);
     }
 
     /**
@@ -256,7 +276,9 @@ export {
     detectBestAudioDevice,
     listAudioDevices,
     validateAudioDevice,
-    getAudioDeviceInfo
+    getAudioDeviceInfo,
+    selectAudioDeviceInteractively,
+    selectAndConfigureAudioDevice
 } from './devices';
 export { validateAudioFile, hasSupportedAudioExtension } from './validation';
 export { createConfiguration, ConfigurationManager } from './configuration';

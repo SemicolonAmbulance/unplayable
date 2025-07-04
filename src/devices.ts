@@ -7,6 +7,13 @@ import { AudioDeviceError } from './error';
 import { run } from './util/child';
 
 /**
+ * Get ffmpeg command path from environment or default
+ */
+const getFFmpegPath = (): string => {
+    return process.env.FFMPEG_PATH || '/opt/homebrew/bin/ffmpeg';
+};
+
+/**
  * Detects the best available audio device for recording
  * @param logger Optional logger for debugging
  * @returns Promise resolving to audio device index as string
@@ -22,7 +29,8 @@ export const detectBestAudioDevice = async (logger?: Logger): Promise<string> =>
 
         // Fallback to preference-based detection if format testing fails
         try {
-            const result = await run('ffmpeg', ['-f', 'avfoundation', '-list_devices', 'true', '-i', '""'], {
+            const ffmpegPath = getFFmpegPath();
+            const result = await run(ffmpegPath, ['-f', 'avfoundation', '-list_devices', 'true', '-i', '""'], {
                 logger,
                 timeout: 10000
             });
@@ -79,7 +87,8 @@ export const detectBestAudioDevice = async (logger?: Logger): Promise<string> =>
  */
 export const parseAudioDevices = async (logger?: Logger): Promise<AudioDevice[]> => {
     try {
-        const result = await run('ffmpeg', ['-f', 'avfoundation', '-list_devices', 'true', '-i', '""'], {
+        const ffmpegPath = getFFmpegPath();
+        const result = await run(ffmpegPath, ['-f', 'avfoundation', '-list_devices', 'true', '-i', '""'], {
             logger,
             timeout: 10000
         });
@@ -136,7 +145,8 @@ export const validateAudioDevice = async (deviceIndex: string, logger?: Logger):
 
         // Test if we can access the device by attempting a short recording test
         try {
-            const testResult = await run('ffmpeg', [
+            const ffmpegPath = getFFmpegPath();
+            const testResult = await run(ffmpegPath, [
                 '-f', 'avfoundation',
                 '-i', `:${deviceIndex}`,
                 '-t', '0.1',
@@ -175,7 +185,8 @@ export const getAudioDeviceInfo = async (deviceIndex: string, logger?: Logger): 
 
         // Get detailed device information
         try {
-            const infoResult = await run('ffmpeg', [
+            const ffmpegPath = getFFmpegPath();
+            const infoResult = await run(ffmpegPath, [
                 '-f', 'avfoundation',
                 '-list_devices', 'true',
                 '-i', `:${deviceIndex}`
@@ -331,4 +342,201 @@ export const audioDeviceConfigExists = async (preferencesDir: string): Promise<b
     } catch {
         return false;
     }
+};
+
+/**
+ * Test if an audio device is working by attempting a short recording
+ * @param deviceIndex Device index to test
+ * @param logger Optional logger for debugging
+ * @returns Promise resolving to true if device works
+ */
+export const testAudioDevice = async (deviceIndex: string, logger?: Logger): Promise<boolean> => {
+    try {
+        const ffmpegPath = getFFmpegPath();
+        await run(ffmpegPath, [
+            '-f', 'avfoundation',
+            '-i', `:${deviceIndex}`,
+            '-t', '0.1',
+            '-f', 'null',
+            '-'
+        ], {
+            logger,
+            timeout: 5000
+        });
+
+        logger?.debug(`Device ${deviceIndex} test: PASS`);
+        return true;
+    } catch (error: any) {
+        logger?.debug(`Device ${deviceIndex} test: FAIL - ${error.message}`);
+        return false;
+    }
+};
+
+/**
+ * Interactively select an audio device from available options
+ * @param logger Optional logger for output
+ * @returns Promise resolving to selected device or null if cancelled
+ */
+export const selectAudioDeviceInteractively = async (logger?: Logger): Promise<AudioDevice | null> => {
+    if (!logger) {
+        throw new Error('Logger is required for interactive device selection');
+    }
+
+    logger.info('🎙️  Available audio devices:');
+    const devices = await parseAudioDevices(logger);
+
+    if (devices.length === 0) {
+        logger.error('❌ No audio devices found. Make sure ffmpeg is installed and audio devices are available.');
+        return null;
+    }
+
+    // Test devices and show status
+    logger.info('🔍 Testing audio devices...');
+    const deviceStatuses = await Promise.all(
+        devices.map(async (device) => {
+            const isWorking = await testAudioDevice(device.index, logger);
+            return { ...device, isWorking };
+        })
+    );
+
+    // Display devices with status
+    deviceStatuses.forEach((device, i) => {
+        const status = device.isWorking ? '✅' : '❌';
+        logger.info(`   ${i + 1}. ${status} ${device.name}`);
+    });
+
+    const workingDevices = deviceStatuses.filter(d => d.isWorking);
+    if (workingDevices.length === 0) {
+        logger.error('❌ No working audio devices found. This may be due to:');
+        logger.error('   • Microphone permission not granted to Terminal/iTerm');
+        logger.error('   • Audio devices in use by other applications');
+        logger.error('   • ffmpeg configuration issues');
+        logger.error('');
+        logger.error('💡 Try:');
+        logger.error('   • Go to System Preferences → Security & Privacy → Privacy → Microphone');
+        logger.error('   • Make sure Terminal (or your terminal app) has microphone access');
+        logger.error('   • Close other audio applications and try again');
+        return null;
+    }
+
+    logger.info('');
+    logger.info('📋 Select an audio device by entering its number (1-' + devices.length + '):');
+
+    return new Promise((resolve) => {
+        // Set up keyboard input
+        process.stdin.setRawMode(true);
+        process.stdin.resume();
+        process.stdin.setEncoding('utf8');
+
+        let inputBuffer = '';
+
+        const keyHandler = (key: string) => {
+            const keyCode = key.charCodeAt(0);
+
+            if (keyCode === 13) { // ENTER key
+                const selectedIndex = parseInt(inputBuffer) - 1;
+
+                if (selectedIndex >= 0 && selectedIndex < devices.length) {
+                    const selectedDevice = deviceStatuses[selectedIndex];
+                    process.stdout.write('\n\n');
+
+                    if (!selectedDevice.isWorking) {
+                        logger.warn(`⚠️  Warning: Selected device "${selectedDevice.name}" failed testing`);
+                        logger.warn('   This device may not work properly for recording');
+                        logger.warn('   Consider selecting a device marked with ✅');
+                    } else {
+                        logger.info(`✅ Selected: ${selectedDevice.name}`);
+                    }
+
+                    // Cleanup and resolve
+                    process.stdin.setRawMode(false);
+                    process.stdin.pause();
+                    process.stdin.removeListener('data', keyHandler);
+                    resolve(selectedDevice);
+                } else {
+                    logger.error('❌ Invalid selection. Please enter a number between 1 and ' + devices.length);
+                    inputBuffer = '';
+                    process.stdout.write('📋 Select an audio device: ');
+                }
+            } else if (keyCode === 3) { // Ctrl+C
+                logger.info('\n❌ Selection cancelled');
+                process.stdin.setRawMode(false);
+                process.stdin.pause();
+                process.stdin.removeListener('data', keyHandler);
+                resolve(null);
+            } else if (keyCode >= 48 && keyCode <= 57) { // Numbers 0-9
+                inputBuffer += key;
+                process.stdout.write(key);
+            } else if (keyCode === 127) { // Backspace
+                if (inputBuffer.length > 0) {
+                    inputBuffer = inputBuffer.slice(0, -1);
+                    process.stdout.write('\b \b');
+                }
+            }
+        };
+
+        process.stdin.on('data', keyHandler);
+        process.stdout.write('📋 Select an audio device: ');
+    });
+};
+
+/**
+ * High-level function to select and configure an audio device
+ * @param preferencesDir Directory to save configuration
+ * @param logger Optional logger for output
+ * @param debug Whether to list devices in debug mode
+ * @returns Promise resolving to success message or throwing error
+ */
+export const selectAndConfigureAudioDevice = async (
+    preferencesDir: string,
+    logger?: Logger,
+    debug: boolean = false
+): Promise<string> => {
+    if (!logger) {
+        throw new Error('Logger is required for audio device selection');
+    }
+
+    logger.info('🎛️  Starting audio device selection...');
+    logger.info('');
+    logger.info('This device will be used to capture audio for:');
+    logger.info('  • Audio commit messages (audio-commit command)');
+    logger.info('  • Audio code reviews (audio-review command)');
+    logger.info('');
+
+    // List available devices in debug mode
+    if (debug) {
+        const devices = await parseAudioDevices(logger);
+        logger.info('🎙️  Available audio devices:');
+        devices.forEach((device, i) => {
+            logger.info(`   ${i + 1}. ${device.name}`);
+        });
+        logger.info('');
+    }
+
+    const selectedDevice = await selectAudioDeviceInteractively(logger);
+
+    if (selectedDevice === null) {
+        logger.error('❌ Audio device selection cancelled or failed');
+        throw new Error('Audio device selection cancelled or failed');
+    }
+
+    // Get device capabilities
+    const deviceInfo = await getAudioDeviceInfo(selectedDevice.index, logger);
+    const capabilities = deviceInfo || {
+        audioDevice: selectedDevice.index,
+        audioDeviceName: selectedDevice.name
+    };
+
+    // Save configuration
+    await saveAudioDeviceConfig(capabilities, preferencesDir, logger);
+
+    const configPath = path.join(preferencesDir, 'audio-device.json');
+    logger.info('💾 Audio device saved to %s', configPath);
+
+    logger.info('✅ Audio device selection complete');
+    logger.info('');
+    logger.info('You can now run audio-commit or audio-review commands to use your selected device');
+    logger.info('To change your audio device in the future, run the select-audio command again');
+
+    return `Audio device configured successfully: ${selectedDevice.name}`;
 }; 

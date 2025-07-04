@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -11,7 +11,10 @@ import {
     findWorkingAudioDevice,
     saveAudioDeviceConfig,
     loadAudioDeviceConfig,
-    audioDeviceConfigExists
+    audioDeviceConfigExists,
+    testAudioDevice,
+    selectAudioDeviceInteractively,
+    selectAndConfigureAudioDevice
 } from '../src/devices';
 
 // Mock the child process utilities
@@ -80,6 +83,76 @@ AVFoundation audio devices:
 
             const devices = await parseAudioDevices();
             expect(devices).toHaveLength(0);
+        });
+
+        it('should handle malformed device lines', async () => {
+            const { run } = await import('../src/util/child');
+            vi.mocked(run).mockResolvedValue({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[0] Built-in Microphone
+[1 MacBook Pro Microphone (malformed - no closing bracket)
+Invalid line without brackets
+[2] AirPods Pro`
+            });
+
+            const devices = await parseAudioDevices();
+            expect(devices).toHaveLength(2);
+            expect(devices[0]).toEqual({ index: '0', name: 'Built-in Microphone' });
+            expect(devices[1]).toEqual({ index: '2', name: 'AirPods Pro' });
+        });
+
+        it('should handle output from stdout instead of stderr', async () => {
+            const { run } = await import('../src/util/child');
+            vi.mocked(run).mockResolvedValue({
+                code: 0,
+                stdout: `AVFoundation audio devices:
+[0] Built-in Microphone
+[1] MacBook Pro Microphone`,
+                stderr: ''
+            });
+
+            const devices = await parseAudioDevices();
+            expect(devices).toHaveLength(2);
+            expect(devices[0]).toEqual({ index: '0', name: 'Built-in Microphone' });
+            expect(devices[1]).toEqual({ index: '1', name: 'MacBook Pro Microphone' });
+        });
+
+        it('should use logger for debugging', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            vi.mocked(run).mockResolvedValue({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[0] Built-in Microphone
+[1] MacBook Pro Microphone`
+            });
+
+            await parseAudioDevices(mockLogger);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Found 2 audio devices');
+        });
+
+        it('should use logger for error reporting', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            vi.mocked(run).mockRejectedValue(new Error('FFmpeg not found'));
+
+            await parseAudioDevices(mockLogger);
+            expect(mockLogger.error).toHaveBeenCalledWith('Error parsing audio devices: Error: FFmpeg not found');
         });
     });
 
@@ -172,6 +245,187 @@ AVFoundation audio devices:
             const bestDevice = await detectBestAudioDevice();
             expect(bestDevice).toBe('1'); // Default fallback
         });
+
+        it('should use logger for debugging when finding working device', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            // Mock device list call for findWorkingAudioDevice 
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[0] Built-in Microphone
+[1] AirPods Pro`
+            });
+
+            // Mock device validation calls
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[0] Built-in Microphone
+[1] AirPods Pro`
+            });
+
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 0, // AirPods validation succeeds
+                stdout: '',
+                stderr: ''
+            });
+
+            const result = await detectBestAudioDevice(mockLogger);
+            expect(result).toBe('1');
+            expect(mockLogger.debug).toHaveBeenCalledWith('Found 2 audio devices');
+            expect(mockLogger.debug).toHaveBeenCalledWith('Testing audio device: [1] AirPods Pro');
+            expect(mockLogger.debug).toHaveBeenCalledWith('✅ Best audio device detected: [1] AirPods Pro');
+        });
+
+        it('should handle fallback to preference-based detection when findWorkingAudioDevice fails', async () => {
+            const { run } = await import('../src/util/child');
+
+            // Mock findWorkingAudioDevice to fail
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: 'No audio devices found'
+            });
+
+            // Mock the preference-based detection calls
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[0] Built-in Microphone
+[1] AirPods Pro`
+            });
+
+            const bestDevice = await detectBestAudioDevice();
+            expect(bestDevice).toBe('1'); // Default fallback
+        });
+
+        it('should handle logger error reporting', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            // Mock the first call to fail for findWorkingAudioDevice
+            vi.mocked(run).mockRejectedValueOnce(new Error('FFmpeg failed'));
+
+            // Mock the fallback ffmpeg call to also fail
+            vi.mocked(run).mockRejectedValueOnce(new Error('FFmpeg failed'));
+
+            const result = await detectBestAudioDevice(mockLogger);
+            expect(result).toBe('1'); // Should return default fallback
+            expect(mockLogger.error).toHaveBeenCalledWith('Error parsing audio devices: Error: FFmpeg failed');
+            expect(mockLogger.error).toHaveBeenCalledWith('Error finding working audio device: AudioDeviceError: No audio devices available');
+        });
+    });
+
+    describe('detectBestAudioDevice - Additional Coverage', () => {
+        it('should use fallback preference-based detection when findWorkingAudioDevice returns null', async () => {
+            const { run } = await import('../src/util/child');
+
+            // Mock findWorkingAudioDevice to return empty device list (triggers fallback)
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: 'No audio devices found'
+            });
+
+            // Mock fallback preference-based detection
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation video devices:
+[0] FaceTime HD Camera
+AVFoundation audio devices:
+[0] Unknown Device
+[1] MacBook Air Microphone
+[2] Other Device`
+            });
+
+            const bestDevice = await detectBestAudioDevice();
+            expect(bestDevice).toBe('1'); // Should find MacBook Air Microphone via preference
+        });
+
+        it('should handle preference detection with no audioDevicesSection', async () => {
+            const { run } = await import('../src/util/child');
+
+            // Mock findWorkingAudioDevice to fail
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: 'No audio devices found'
+            });
+
+            // Mock fallback with no audio devices section
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: 'AVFoundation video devices:\n[0] FaceTime HD Camera'
+            });
+
+            const bestDevice = await detectBestAudioDevice();
+            expect(bestDevice).toBe('1'); // Should return default fallback
+        });
+
+        it('should handle ffmpeg error in preference detection fallback', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            // Mock findWorkingAudioDevice to fail
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: 'No audio devices found'
+            });
+
+            // Mock fallback ffmpeg call to fail
+            vi.mocked(run).mockRejectedValueOnce(new Error('FFmpeg binary not found'));
+
+            const bestDevice = await detectBestAudioDevice(mockLogger);
+            expect(bestDevice).toBe('1'); // Should return default fallback
+            expect(mockLogger.debug).toHaveBeenCalledWith('FFmpeg device listing failed: Error: FFmpeg binary not found');
+        });
+
+        it('should extract device index from preference match', async () => {
+            const { run } = await import('../src/util/child');
+
+            // Mock findWorkingAudioDevice to fail
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: 'No audio devices found'
+            });
+
+            // Mock fallback with AirPods device
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[0] Built-in Microphone
+[3] AirPods Pro
+[5] External Mic`
+            });
+
+            const bestDevice = await detectBestAudioDevice();
+            expect(bestDevice).toBe('3'); // Should extract device index 3 for AirPods
+        });
     });
 
     describe('validateAudioDevice', () => {
@@ -252,6 +506,50 @@ AVFoundation audio devices:
 
             const isValid = await validateAudioDevice('0');
             expect(isValid).toBe(false);
+        });
+    });
+
+    describe('validateAudioDevice - Additional Coverage', () => {
+        it('should use logger for device test failures', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            // Mock device list call
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[0] Built-in Microphone`
+            });
+
+            // Mock device test call that throws error
+            vi.mocked(run).mockRejectedValueOnce(new Error('Device permission denied'));
+
+            const isValid = await validateAudioDevice('0', mockLogger);
+            expect(isValid).toBe(false);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Device test failed for 0: Error: Device permission denied');
+        });
+
+        it('should handle validateAudioDevice outer catch block', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            // Mock parseAudioDevices to throw error
+            vi.mocked(run).mockRejectedValue(new Error('Network error'));
+
+            const isValid = await validateAudioDevice('0', mockLogger);
+            expect(isValid).toBe(false);
+            expect(mockLogger.error).toHaveBeenCalledWith('Error parsing audio devices: Error: Network error');
         });
     });
 
@@ -376,6 +674,54 @@ AVFoundation audio devices:
         });
     });
 
+    describe('getAudioDeviceInfo - Additional Coverage', () => {
+        it('should handle device info error and return basic info', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            // Mock device list call
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[1] MacBook Pro Microphone`
+            });
+
+            // Mock device info call that throws error
+            vi.mocked(run).mockRejectedValueOnce(new Error('Device info fetch failed'));
+
+            const deviceInfo = await getAudioDeviceInfo('1', mockLogger);
+
+            expect(deviceInfo).toEqual({
+                audioDevice: '1',
+                audioDeviceName: 'MacBook Pro Microphone'
+            });
+            expect(mockLogger.debug).toHaveBeenCalledWith('Failed to get detailed info for device 1: Error: Device info fetch failed');
+        });
+
+        it('should handle getAudioDeviceInfo outer catch block', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            // Mock parseAudioDevices to throw error
+            vi.mocked(run).mockRejectedValue(new Error('System error'));
+
+            const deviceInfo = await getAudioDeviceInfo('1', mockLogger);
+            expect(deviceInfo).toBeNull();
+            expect(mockLogger.error).toHaveBeenCalledWith('Error parsing audio devices: Error: System error');
+        });
+    });
+
     describe('listAudioDevices', () => {
         it('should return the same result as parseAudioDevices', async () => {
             const { run } = await import('../src/util/child');
@@ -393,9 +739,87 @@ AVFoundation audio devices:
             expect(devices[0]).toEqual({ index: '0', name: 'Built-in Microphone' });
             expect(devices[1]).toEqual({ index: '1', name: 'MacBook Pro Microphone' });
         });
+
+        describe('selectAudioDeviceInteractively', () => {
+            it('should throw error when no logger provided', async () => {
+                await expect(selectAudioDeviceInteractively()).rejects.toThrow('Logger is required for interactive device selection');
+            });
+
+            it('should return null when no audio devices found', async () => {
+                const mockLogger = {
+                    debug: vi.fn(),
+                    info: vi.fn(),
+                    warn: vi.fn(),
+                    error: vi.fn()
+                };
+
+                const { run } = await import('../src/util/child');
+
+                // Mock parseAudioDevices call with no devices
+                vi.mocked(run).mockResolvedValueOnce({
+                    code: 1,
+                    stdout: '',
+                    stderr: 'No audio devices found'
+                });
+
+                const result = await selectAudioDeviceInteractively(mockLogger);
+
+                expect(result).toBeNull();
+                expect(mockLogger.error).toHaveBeenCalledWith('❌ No audio devices found. Make sure ffmpeg is installed and audio devices are available.');
+            });
+        });
+
+        describe('selectAndConfigureAudioDevice', () => {
+            it('should throw error when no logger provided', async () => {
+                await expect(selectAndConfigureAudioDevice('/test/preferences')).rejects.toThrow('Logger is required for audio device selection');
+            });
+        });
+    });
+
+    describe('selectAudioDeviceInteractively - Additional Coverage', () => {
+        it('should handle no working devices scenario', async () => {
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            const { run } = await import('../src/util/child');
+
+            // Mock parseAudioDevices call
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[0] Built-in Microphone
+[1] MacBook Pro Microphone`
+            });
+
+            // Mock testAudioDevice calls - all devices fail
+            vi.mocked(run).mockRejectedValue(new Error('Access denied'));
+
+            const result = await selectAudioDeviceInteractively(mockLogger);
+
+            expect(result).toBeNull();
+            expect(mockLogger.error).toHaveBeenCalledWith('❌ No working audio devices found. This may be due to:');
+            expect(mockLogger.error).toHaveBeenCalledWith('   • Microphone permission not granted to Terminal/iTerm');
+            expect(mockLogger.error).toHaveBeenCalledWith('   • Audio devices in use by other applications');
+            expect(mockLogger.error).toHaveBeenCalledWith('   • ffmpeg configuration issues');
+            expect(mockLogger.error).toHaveBeenCalledWith('');
+            expect(mockLogger.error).toHaveBeenCalledWith('💡 Try:');
+            expect(mockLogger.error).toHaveBeenCalledWith('   • Go to System Preferences → Security & Privacy → Privacy → Microphone');
+            expect(mockLogger.error).toHaveBeenCalledWith('   • Make sure Terminal (or your terminal app) has microphone access');
+            expect(mockLogger.error).toHaveBeenCalledWith('   • Close other audio applications and try again');
+        });
     });
 
     describe('findWorkingAudioDevice', () => {
+        beforeEach(() => {
+            // Clear all mocks before each test in this suite
+            vi.clearAllMocks();
+        });
+
         it('should return preferred device in working order', async () => {
             const { run } = await import('../src/util/child');
 
@@ -487,7 +911,7 @@ AVFoundation audio devices:
             const { run } = await import('../src/util/child');
 
             // Mock device list call with no devices - parseAudioDevices returns empty array when no "AVFoundation audio devices:" section
-            vi.mocked(run).mockResolvedValueOnce({
+            vi.mocked(run).mockResolvedValue({
                 code: 1,
                 stdout: '',
                 stderr: 'FFmpeg error: no devices detected'
@@ -531,6 +955,63 @@ AVFoundation audio devices:
 
             expect(workingDevice).toBeNull();
         });
+
+        it('should throw AudioDeviceError when no devices are available', async () => {
+            const { run } = await import('../src/util/child');
+
+            // Mock parseAudioDevices to return empty array
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: 'No audio devices found'
+            });
+
+            await expect(findWorkingAudioDevice()).resolves.toBeNull();
+        });
+
+        it('should use logger for debugging device tests', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            // Mock device list call
+            vi.mocked(run).mockResolvedValueOnce({
+                code: 1,
+                stdout: '',
+                stderr: `AVFoundation audio devices:
+[0] Built-in Microphone`
+            });
+
+            // Mock validation calls
+            vi.mocked(run).mockResolvedValue({
+                code: 0,
+                stdout: '',
+                stderr: ''
+            });
+
+            await findWorkingAudioDevice(mockLogger);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Testing audio device: [0] Built-in Microphone');
+        });
+
+        it('should use logger for error reporting', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            vi.mocked(run).mockRejectedValue(new Error('FFmpeg failed'));
+
+            await findWorkingAudioDevice(mockLogger);
+            expect(mockLogger.error).toHaveBeenCalledWith('Error parsing audio devices: Error: FFmpeg failed');
+            expect(mockLogger.error).toHaveBeenCalledWith('Error finding working audio device: AudioDeviceError: No audio devices available');
+        });
     });
 
     describe('saveAudioDeviceConfig', () => {
@@ -557,6 +1038,25 @@ AVFoundation audio devices:
                 JSON.stringify(config, null, 2),
                 'utf8'
             );
+        });
+
+        it('should use logger for successful save', async () => {
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            const config = {
+                audioDevice: '1',
+                audioDeviceName: 'Test Device'
+            };
+            const preferencesDir = '/test/preferences';
+
+            await saveAudioDeviceConfig(config, preferencesDir, mockLogger);
+
+            expect(mockLogger.debug).toHaveBeenCalledWith('Audio device configuration saved to: /test/preferences/audio-device.json');
         });
 
         it('should handle write errors', async () => {
@@ -606,6 +1106,28 @@ AVFoundation audio devices:
             );
         });
 
+        it('should use logger for successful load', async () => {
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            const config = {
+                audioDevice: '1',
+                audioDeviceName: 'Test Device'
+            };
+            const preferencesDir = '/test/preferences';
+
+            vi.mocked(fs.readFile).mockResolvedValue(JSON.stringify(config));
+
+            const loadedConfig = await loadAudioDeviceConfig(preferencesDir, mockLogger);
+
+            expect(loadedConfig).toEqual(config);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Audio device configuration loaded from: /test/preferences/audio-device.json');
+        });
+
         it('should return null when config file does not exist', async () => {
             const preferencesDir = '/test/preferences';
             const error = new Error('File not found') as any;
@@ -616,6 +1138,26 @@ AVFoundation audio devices:
             const loadedConfig = await loadAudioDeviceConfig(preferencesDir);
 
             expect(loadedConfig).toBeNull();
+        });
+
+        it('should use logger for file not found', async () => {
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            const preferencesDir = '/test/preferences';
+            const error = new Error('File not found') as any;
+            error.code = 'ENOENT';
+
+            vi.mocked(fs.readFile).mockRejectedValue(error);
+
+            const loadedConfig = await loadAudioDeviceConfig(preferencesDir, mockLogger);
+
+            expect(loadedConfig).toBeNull();
+            expect(mockLogger.debug).toHaveBeenCalledWith('No audio device configuration found at: /test/preferences/audio-device.json');
         });
 
         it('should handle JSON parsing errors', async () => {
@@ -661,6 +1203,168 @@ AVFoundation audio devices:
             const exists = await audioDeviceConfigExists(preferencesDir);
 
             expect(exists).toBe(false);
+        });
+    });
+
+    describe('testAudioDevice', () => {
+        it('should return true for working audio device', async () => {
+            const { run } = await import('../src/util/child');
+
+            vi.mocked(run).mockResolvedValue({
+                code: 0, // Success
+                stdout: '',
+                stderr: ''
+            });
+
+            const isWorking = await testAudioDevice('1');
+            expect(isWorking).toBe(true);
+            expect(run).toHaveBeenCalledWith(
+                expect.stringContaining('ffmpeg'),
+                ['-f', 'avfoundation', '-i', ':1', '-t', '0.1', '-f', 'null', '-'],
+                expect.objectContaining({ timeout: 5000 })
+            );
+        });
+
+        it('should return false for non-working audio device', async () => {
+            const { run } = await import('../src/util/child');
+
+            vi.mocked(run).mockRejectedValue(new Error('Device access failed'));
+
+            const isWorking = await testAudioDevice('1');
+            expect(isWorking).toBe(false);
+        });
+
+        it('should return false when device test throws error', async () => {
+            const { run } = await import('../src/util/child');
+
+            vi.mocked(run).mockRejectedValue(new Error('FFmpeg timeout'));
+
+            const isWorking = await testAudioDevice('1');
+            expect(isWorking).toBe(false);
+        });
+
+        it('should use logger for debug output', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            vi.mocked(run).mockResolvedValue({
+                code: 0,
+                stdout: '',
+                stderr: ''
+            });
+
+            await testAudioDevice('1', mockLogger);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Device 1 test: PASS');
+        });
+
+        it('should log failure message on device test failure', async () => {
+            const { run } = await import('../src/util/child');
+            const mockLogger = {
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn()
+            };
+
+            const error = new Error('Device not found');
+            vi.mocked(run).mockRejectedValue(error);
+
+            await testAudioDevice('1', mockLogger);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Device 1 test: FAIL - Device not found');
+        });
+    });
+
+    describe('getFFmpegPath utility', () => {
+        const originalEnv = process.env;
+
+        beforeEach(() => {
+            process.env = { ...originalEnv };
+        });
+
+        afterEach(() => {
+            process.env = originalEnv;
+        });
+
+        it('should use environment variable when FFMPEG_PATH is set', async () => {
+            process.env.FFMPEG_PATH = '/custom/path/to/ffmpeg';
+
+            // Import the module to get the function
+            const devicesModule = await import('../src/devices');
+
+            // We need to test this indirectly through a function that uses getFFmpegPath
+            const { run } = await import('../src/util/child');
+            vi.mocked(run).mockResolvedValue({
+                code: 1,
+                stdout: '',
+                stderr: 'AVFoundation audio devices:\n[0] Test Device'
+            });
+
+            await devicesModule.parseAudioDevices();
+
+            expect(run).toHaveBeenCalledWith(
+                '/custom/path/to/ffmpeg',
+                expect.any(Array),
+                expect.any(Object)
+            );
+        });
+
+        it('should use default path when FFMPEG_PATH is not set', async () => {
+            delete process.env.FFMPEG_PATH;
+
+            const devicesModule = await import('../src/devices');
+
+            const { run } = await import('../src/util/child');
+            vi.mocked(run).mockResolvedValue({
+                code: 1,
+                stdout: '',
+                stderr: 'AVFoundation audio devices:\n[0] Test Device'
+            });
+
+            await devicesModule.parseAudioDevices();
+
+            expect(run).toHaveBeenCalledWith(
+                '/opt/homebrew/bin/ffmpeg',
+                expect.any(Array),
+                expect.any(Object)
+            );
+        });
+    });
+
+    describe('getFFmpegPath utility - Additional Coverage', () => {
+        const originalEnv = process.env;
+
+        beforeEach(() => {
+            process.env = { ...originalEnv };
+        });
+
+        afterEach(() => {
+            process.env = originalEnv;
+        });
+
+        it('should handle empty FFMPEG_PATH environment variable', async () => {
+            process.env.FFMPEG_PATH = '';
+
+            const devicesModule = await import('../src/devices');
+
+            const { run } = await import('../src/util/child');
+            vi.mocked(run).mockResolvedValue({
+                code: 1,
+                stdout: '',
+                stderr: 'AVFoundation audio devices:\n[0] Test Device'
+            });
+
+            await devicesModule.parseAudioDevices();
+
+            expect(run).toHaveBeenCalledWith(
+                '/opt/homebrew/bin/ffmpeg', // Should use default when empty
+                expect.any(Array),
+                expect.any(Object)
+            );
         });
     });
 }); 
