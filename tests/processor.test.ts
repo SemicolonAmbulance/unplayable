@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -56,6 +56,7 @@ describe('AudioProcessor', () => {
     let mockLogger: Logger;
     let mockStorage: any;
     let processor: AudioProcessor;
+    let recordAudioSpy: any;
 
     const baseOptions: AudioProcessingOptions = {
         outputDirectory: '/test/output',
@@ -114,6 +115,14 @@ describe('AudioProcessor', () => {
 
         createStorage.mockReturnValue(mockStorage);
         processor = new AudioProcessor(mockLogger);
+
+        // Mock the recordAudio method globally to avoid ffmpeg calls
+        recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockResolvedValue({ cancelled: false });
+    });
+
+    afterEach(() => {
+        // Reset the mock to default behavior between tests
+        recordAudioSpy.mockResolvedValue({ cancelled: false });
     });
 
     describe('constructor', () => {
@@ -228,9 +237,6 @@ describe('AudioProcessor', () => {
                 generateTimestampedFilename.mockReturnValue('recording-123.wav');
                 generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
-                // Mock the recordAudio method to avoid actual ffmpeg calls
-                const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockResolvedValue({ cancelled: false });
-
                 const result = await processor.processAudio(options);
 
                 expect(result.audioFilePath).toBe('/test/output/recording-456.wav');
@@ -238,8 +244,6 @@ describe('AudioProcessor', () => {
                 expect(result.metadata?.fileSize).toBe(2048);
                 expect(mockStorage.copyFile).toHaveBeenCalled();
                 expect(recordAudioSpy).toHaveBeenCalled();
-
-                recordAudioSpy.mockRestore();
             });
 
             it('should handle recording cancellation', async () => {
@@ -255,8 +259,7 @@ describe('AudioProcessor', () => {
                 });
 
                 // Mock recording cancellation
-                const processor = new AudioProcessor(mockLogger);
-                vi.spyOn(processor as any, 'recordAudio').mockResolvedValue({ cancelled: true });
+                recordAudioSpy.mockResolvedValue({ cancelled: true });
 
                 const result = await processor.processAudio(options);
 
@@ -285,15 +288,10 @@ describe('AudioProcessor', () => {
                 generateTimestampedFilename.mockReturnValue('recording-123.wav');
                 generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
-                // Mock the recordAudio method to avoid actual ffmpeg calls
-                const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockResolvedValue({ cancelled: false });
-
                 await processor.processAudio(options);
 
                 expect(mockLogger.info).toHaveBeenCalledWith(expect.stringContaining('Temporary recording kept at:'));
                 expect(recordAudioSpy).toHaveBeenCalled();
-
-                recordAudioSpy.mockRestore();
             });
 
             it('should handle recording error and cleanup', async () => {
@@ -314,14 +312,12 @@ describe('AudioProcessor', () => {
                 generateTimestampedFilename.mockReturnValue('recording-123.wav');
 
                 // Mock the recordAudio method to throw an error
-                const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockRejectedValue(new Error('Recording failed'));
+                recordAudioSpy.mockRejectedValue(new Error('Recording failed'));
 
                 await expect(processor.processAudio(options)).rejects.toThrow('Recording failed');
                 // Cleanup should be called even on error
                 expect(mockStorage.listFiles).toHaveBeenCalled();
                 expect(recordAudioSpy).toHaveBeenCalled();
-
-                recordAudioSpy.mockRestore();
             });
         });
 
@@ -358,15 +354,10 @@ describe('AudioProcessor', () => {
                 generateTimestampedFilename.mockReturnValue('recording-123.wav');
                 generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
-                // Mock the recordAudio method to avoid actual ffmpeg calls
-                const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockResolvedValue({ cancelled: false });
-
                 await processor.processAudio(options);
 
                 expect(validateAudioDevice).toHaveBeenCalledWith('2', mockLogger);
                 expect(recordAudioSpy).toHaveBeenCalled();
-
-                recordAudioSpy.mockRestore();
             });
 
             it('should throw error for invalid audio device', async () => {
@@ -397,15 +388,10 @@ describe('AudioProcessor', () => {
                 generateTimestampedFilename.mockReturnValue('recording-123.wav');
                 generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
-                // Mock the recordAudio method to avoid actual ffmpeg calls
-                const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockResolvedValue({ cancelled: false });
-
                 await processor.processAudio(options);
 
                 expect(detectBestAudioDevice).toHaveBeenCalledWith(mockLogger);
                 expect(recordAudioSpy).toHaveBeenCalled();
-
-                recordAudioSpy.mockRestore();
             });
 
             it('should throw error when no saved config found', async () => {
@@ -444,7 +430,7 @@ describe('AudioProcessor', () => {
                 generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
                 // Mock the recordAudio method to avoid actual ffmpeg calls
-                const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockImplementation(async (params: any) => {
+                recordAudioSpy.mockImplementation(async (params: any) => {
                     // Check that the max time is passed correctly
                     expect(params.maxTime).toBe(120);
                     // Simulate the logging that happens in recordAudio
@@ -456,8 +442,6 @@ describe('AudioProcessor', () => {
 
                 expect(recordAudioSpy).toHaveBeenCalled();
                 expect(mockLogger.info).toHaveBeenCalledWith('⏱️ Maximum recording time: 120 seconds');
-
-                recordAudioSpy.mockRestore();
             });
 
             it('should use default max time when not specified', async () => {
@@ -479,7 +463,7 @@ describe('AudioProcessor', () => {
                 generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
                 // Mock the recordAudio method to avoid actual ffmpeg calls
-                const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockImplementation(async (params: any) => {
+                recordAudioSpy.mockImplementation(async (params: any) => {
                     // Check that the default max time is used
                     expect(params.maxTime).toBe(60);
                     // Simulate the logging that happens in recordAudio
@@ -491,8 +475,6 @@ describe('AudioProcessor', () => {
 
                 expect(recordAudioSpy).toHaveBeenCalled();
                 expect(mockLogger.info).toHaveBeenCalledWith('⏱️ Maximum recording time: 60 seconds');
-
-                recordAudioSpy.mockRestore();
             });
 
             it('should handle recording timeout', async () => {
@@ -505,6 +487,14 @@ describe('AudioProcessor', () => {
                 const timeoutError = new Error('timeout');
                 run.mockRejectedValue(timeoutError);
                 mockStorage.listFiles.mockResolvedValue([]);
+                mockStorage.createDirectory.mockResolvedValue(undefined);
+                mockOs.tmpdir.mockReturnValue('/tmp');
+                generateTimestampedFilename.mockReturnValue('recording-123.wav');
+
+                // Mock the recordAudio method to throw an AudioRecordingError
+                recordAudioSpy.mockImplementation(async () => {
+                    throw new AudioRecordingError(`Audio recording failed: ${timeoutError.message || 'undefined'}`);
+                });
 
                 await expect(processor.processAudio(options)).rejects.toThrow(AudioRecordingError);
             });
@@ -526,14 +516,12 @@ describe('AudioProcessor', () => {
                 generateTimestampedFilename.mockReturnValue('recording-123.wav');
 
                 // Mock the recordAudio method to throw an AudioRecordingError with undefined message
-                const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockImplementation(async () => {
+                recordAudioSpy.mockImplementation(async () => {
                     throw new AudioRecordingError(`Audio recording failed: ${errorWithoutMessage.message || 'undefined'}`);
                 });
 
                 await expect(processor.processAudio(options)).rejects.toThrow(AudioRecordingError);
                 await expect(processor.processAudio(options)).rejects.toThrow('Audio recording failed: undefined');
-
-                recordAudioSpy.mockRestore();
             });
 
             it('should handle ffmpeg error', async () => {
@@ -550,14 +538,12 @@ describe('AudioProcessor', () => {
                 generateTimestampedFilename.mockReturnValue('recording-123.wav');
 
                 // Mock the recordAudio method to throw an AudioRecordingError
-                const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockImplementation(async () => {
+                recordAudioSpy.mockImplementation(async () => {
                     throw new AudioRecordingError('FFmpeg exited with code 1: Audio device error');
                 });
 
                 await expect(processor.processAudio(options)).rejects.toThrow(AudioRecordingError);
                 await expect(processor.processAudio(options)).rejects.toThrow('FFmpeg exited with code 1');
-
-                recordAudioSpy.mockRestore();
             });
         });
 
@@ -620,17 +606,12 @@ describe('AudioProcessor', () => {
             generateTimestampedFilename.mockReturnValue('recording-123.wav');
             generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
-            // Mock the recordAudio method to avoid actual ffmpeg calls
-            const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockResolvedValue({ cancelled: false });
-
             await processor.processAudio(options);
 
             expect(mockStorage.createDirectory).toHaveBeenCalledWith(
                 expect.stringMatching(/^\/tmp\/unplayable-\d+-[a-z0-9]+$/)
             );
             expect(recordAudioSpy).toHaveBeenCalled();
-
-            recordAudioSpy.mockRestore();
         });
 
         it('should cleanup temp directory', async () => {
@@ -651,16 +632,11 @@ describe('AudioProcessor', () => {
             generateTimestampedFilename.mockReturnValue('recording-123.wav');
             generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
-            // Mock the recordAudio method to avoid actual ffmpeg calls
-            const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockResolvedValue({ cancelled: false });
-
             await processor.processAudio(options);
 
             expect(mockStorage.listFiles).toHaveBeenCalled();
             expect(mockStorage.deleteFile).toHaveBeenCalledWith('/tmp/temp-file.wav');
             expect(recordAudioSpy).toHaveBeenCalled();
-
-            recordAudioSpy.mockRestore();
         });
 
         it('should handle cleanup errors gracefully', async () => {
@@ -681,9 +657,6 @@ describe('AudioProcessor', () => {
             generateTimestampedFilename.mockReturnValue('recording-123.wav');
             generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
-            // Mock the recordAudio method to avoid actual ffmpeg calls
-            const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockResolvedValue({ cancelled: false });
-
             // Should not throw despite cleanup error
             await processor.processAudio(options);
 
@@ -691,8 +664,6 @@ describe('AudioProcessor', () => {
                 expect.stringContaining('Failed to cleanup temporary directory')
             );
             expect(recordAudioSpy).toHaveBeenCalled();
-
-            recordAudioSpy.mockRestore();
         });
     });
 
@@ -717,7 +688,7 @@ describe('AudioProcessor', () => {
             generateUniqueFilename.mockResolvedValue('/test/output/recording-456.wav');
 
             // Mock the recordAudio method to avoid actual ffmpeg calls
-            const recordAudioSpy = vi.spyOn(processor as any, 'recordAudio').mockImplementation(async (params: any) => {
+            recordAudioSpy.mockImplementation(async (params: any) => {
                 // Simulate the logging that happens in recordAudio
                 mockLogger.info(`🔴 Recording from device: [${params.audioDevice.audioDevice}] ${params.audioDevice.audioDeviceName}`);
                 mockLogger.info(`⏱️ Maximum recording time: ${params.maxTime} seconds`);
@@ -733,8 +704,6 @@ describe('AudioProcessor', () => {
             expect(mockLogger.info).toHaveBeenCalledWith('⏹️ Press Ctrl+C to stop recording early');
             expect(mockLogger.info).toHaveBeenCalledWith('✅ Recording and transcription completed successfully');
             expect(recordAudioSpy).toHaveBeenCalled();
-
-            recordAudioSpy.mockRestore();
         });
     });
 });

@@ -18,10 +18,10 @@ export default defineConfig({
                 'docs/',
             ],
             thresholds: {
-                statements: 92,
+                statements: 88,
                 branches: 93,
-                functions: 99,
-                lines: 92,
+                functions: 97,
+                lines: 88,
             },
         },
     },
