@@ -11,8 +11,8 @@ import {
     Logger
 } from './types';
 import {
-    AudioRecordingError,
-    AudioConfigurationError
+    AudioConfigurationError,
+    AudioRecordingError
 } from './error';
 import {
     detectBestAudioDevice,
@@ -209,24 +209,22 @@ export class AudioProcessor {
             const ffmpegPath = this.config?.get('ffmpeg')?.path || 'ffmpeg';
 
             const result = await run(ffmpegPath, ffmpegArgs, {
+                timeout: (maxTime + 10) * 1000, // Add 10 seconds buffer to the timeout
                 logger: this.logger,
-                timeout: (maxTime + 5) * 1000 // Add 5 seconds buffer
+                captureStderr: true
             });
 
             if (result.code !== 0) {
-                throw AudioRecordingError.recordingFailed(`FFmpeg exited with code ${result.code}: ${result.stderr}`);
+                this.logger?.error(`FFmpeg exited with code ${result.code}: ${result.stderr}`);
+                throw new AudioRecordingError(`FFmpeg exited with code ${result.code}: ${result.stderr}`);
             }
 
             this.logger?.info(`✅ Recording completed: ${outputPath}`);
             return { cancelled: false };
 
         } catch (error: any) {
-            if (error.message?.includes('timeout')) {
-                throw AudioRecordingError.recordingTimeout(maxTime);
-            }
-
-            this.logger?.error(`Recording failed: ${error.message}`);
-            throw AudioRecordingError.recordingFailed(error.message);
+            this.logger?.error(`Recording failed: ${error.message || 'undefined'}`);
+            throw new AudioRecordingError(`Audio recording failed: ${error.message || 'undefined'}`);
         }
     }
 
