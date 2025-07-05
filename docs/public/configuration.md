@@ -29,9 +29,6 @@ export FFMPEG_TIMEOUT="30000"
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key for transcription | *(required)* |
-| `OPENAI_MODEL` | OpenAI model to use | `whisper-1` |
-| `OPENAI_BASE_URL` | OpenAI API base URL | `https://api.openai.com/v1` |
 | `UNPLAYABLE_OUTPUT_DIR` | Directory for recordings | `./recordings` |
 | `UNPLAYABLE_PREFS_DIR` | Directory for preferences | `~/.unplayable` |
 | `UNPLAYABLE_LOG_LEVEL` | Logging level | `info` |

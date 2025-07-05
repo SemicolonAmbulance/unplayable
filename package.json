@@ -43,8 +43,6 @@
     "keywords": [
         "audio",
         "recording",
-        "transcription",
-        "speech-to-text",
         "microphone",
         "ffmpeg",
         "cross-platform"

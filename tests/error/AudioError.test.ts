@@ -225,17 +225,6 @@ describe('AudioError', () => {
                 });
             });
 
-            describe('transcriptionFailed', () => {
-                it('should create an error for transcription failed', () => {
-                    const error = AudioProcessingError.transcriptionFailed('API rate limit exceeded');
-
-                    expect(error).toBeInstanceOf(AudioProcessingError);
-                    expect(error.message).toBe('Audio transcription failed: API rate limit exceeded');
-                    expect(error.code).toBe('AUDIO_PROCESSING_ERROR');
-                    expect(error.details).toEqual({ reason: 'API rate limit exceeded' });
-                });
-            });
-
             describe('emptyFile', () => {
                 it('should create an error for empty file', () => {
                     const error = AudioProcessingError.emptyFile('/path/to/empty.wav');
@@ -331,17 +320,6 @@ describe('AudioError', () => {
                     expect(error.message).toBe('Missing required configuration: apiKey');
                     expect(error.code).toBe('AUDIO_CONFIGURATION_ERROR');
                     expect(error.details).toEqual({ field: 'apiKey' });
-                });
-            });
-
-            describe('invalidApiKey', () => {
-                it('should create an error for invalid API key', () => {
-                    const error = AudioConfigurationError.invalidApiKey();
-
-                    expect(error).toBeInstanceOf(AudioConfigurationError);
-                    expect(error.message).toBe('Invalid or missing OpenAI API key for transcription');
-                    expect(error.code).toBe('AUDIO_CONFIGURATION_ERROR');
-                    expect(error.details).toBeUndefined();
                 });
             });
         });

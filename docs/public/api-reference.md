@@ -13,7 +13,6 @@ class Unplayable {
   // Audio processing
   async processAudio(options?: Partial<AudioProcessingOptions>): Promise<AudioProcessingResult>
   async recordAudio(options?: Partial<AudioProcessingOptions>): Promise<string>
-  async transcribeFile(filePath: string, options?: Partial<AudioProcessingOptions>): Promise<string>
   
   // Device management
   async getAudioDevices(): Promise<AudioDevice[]>
@@ -87,22 +86,6 @@ const audioPath = await recordAudio({
 **Parameters:** `Partial<AudioProcessingOptions>` *(optional)*
 **Returns:** `Promise<string>` - Path to the recorded audio file
 
-### `transcribeFile(filePath, options?)`
-
-Transcribe existing audio file:
-
-```typescript
-import { transcribeFile } from '@theunwalked/unplayable';
-
-const transcript = await transcribeFile('./audio.mp3');
-```
-
-**Parameters:**
-- `filePath: string` - Path to the audio file
-- `options` *(optional)*: `Partial<AudioProcessingOptions>`
-
-**Returns:** `Promise<string>` - Transcribed text
-
 ### `getAudioDevices()`
 
 List available audio devices:
@@ -137,9 +120,7 @@ interface AudioProcessingOptions {
 
 ```typescript
 interface AudioProcessingResult {
-  transcript: string;               // Transcribed text content
   audioFilePath?: string;          // Path to the audio file
-  transcriptFilePath?: string;     // Path to the transcript file
   cancelled: boolean;              // Whether operation was cancelled
   metadata?: AudioProcessingMetadata; // Additional metadata
 }

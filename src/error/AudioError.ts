@@ -80,13 +80,6 @@ export class AudioProcessingError extends UnplayableError {
         );
     }
 
-    static transcriptionFailed(reason: string): AudioProcessingError {
-        return new AudioProcessingError(
-            `Audio transcription failed: ${reason}`,
-            { reason }
-        );
-    }
-
     static emptyFile(filePath: string): AudioProcessingError {
         return new AudioProcessingError(
             `Audio file is empty: ${filePath}`,
@@ -118,9 +111,4 @@ export class AudioConfigurationError extends UnplayableError {
         );
     }
 
-    static invalidApiKey(): AudioConfigurationError {
-        return new AudioConfigurationError(
-            'Invalid or missing OpenAI API key for transcription'
-        );
-    }
 } 

@@ -6,19 +6,6 @@ Comprehensive guide to supported audio formats and audio device management in Un
 
 Unplayable supports a wide range of audio formats for both input and output:
 
-### Input Formats (Transcription)
-
-- **MP3** (.mp3) - MPEG-1 Audio Layer 3
-- **WAV** (.wav) - Waveform Audio File Format  
-- **FLAC** (.flac) - Free Lossless Audio Codec
-- **AAC** (.aac) - Advanced Audio Coding
-- **M4A** (.m4a) - MPEG-4 Audio
-- **OGG** (.ogg) - Ogg Vorbis
-- **Opus** (.opus) - Opus Audio Codec
-- **WebM** (.webm) - WebM Audio
-- **MPEG** (.mpeg, .mpga) - MPEG Audio
-- **MP4** (.mp4) - MPEG-4 Video (audio track)
-
 ### Output Formats (Recording)
 
 Default recording format depends on the platform:

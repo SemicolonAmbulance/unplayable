@@ -7,7 +7,6 @@ A cross-platform audio recording and processing library, designed to be easily i
 - 🎙️ **Cross-platform audio recording** via FFmpeg/AVFoundation
 - 🎯 **Audio file processing** and validation
 - 🔊 **Audio device management** with auto-detection
-- 📝 **Speech-to-text transcription** (OpenAI Whisper)
 - ⚙️ **Flexible configuration** with environment variable support
 - 🧪 **Comprehensive testing** and TypeScript support
 - 📦 **Library-first design** for easy integration
@@ -62,23 +61,7 @@ const result = await unplayable.processAudio({
   maxRecordingTime: 30
 });
 
-console.log('Transcript:', result.transcript);
 console.log('Audio file:', result.audioFilePath);
-```
-
-### Transcribe Existing Audio File
-
-```typescript
-import { transcribeFile } from '@theunwalked/unplayable';
-
-// Simple transcription
-const transcript = await transcribeFile('./my-audio.mp3');
-console.log('Transcript:', transcript);
-
-// With custom options
-const transcript = await transcribeFile('./my-audio.mp3', {
-  outputDirectory: './transcripts'
-});
 ```
 
 ### List and Validate Audio Devices
@@ -175,7 +158,6 @@ class Unplayable {
   // Audio processing
   async processAudio(options?: Partial<AudioProcessingOptions>): Promise<AudioProcessingResult>
   async recordAudio(options?: Partial<AudioProcessingOptions>): Promise<string>
-  async transcribeFile(filePath: string, options?: Partial<AudioProcessingOptions>): Promise<string>
   
   // Device management
   async getAudioDevices(): Promise<AudioDevice[]>
@@ -237,16 +219,6 @@ const audioPath = await recordAudio({
 });
 ```
 
-#### `transcribeFile(filePath, options?)`
-
-Transcribe existing audio file:
-
-```typescript
-import { transcribeFile } from '@theunwalked/unplayable';
-
-const transcript = await transcribeFile('./audio.mp3');
-```
-
 #### `getAudioDevices()`
 
 List available audio devices:
@@ -279,9 +251,7 @@ interface AudioProcessingOptions {
 
 ```typescript
 interface AudioProcessingResult {
-  transcript: string;               // Transcribed text content
   audioFilePath?: string;          // Path to the audio file
-  transcriptFilePath?: string;     // Path to the transcript file
   cancelled: boolean;              // Whether operation was cancelled
   metadata?: AudioProcessingMetadata; // Additional metadata
 }
@@ -374,24 +344,6 @@ const app = express();
 const upload = multer({ dest: 'uploads/' });
 const unplayable = await createUnplayable();
 
-// Transcribe uploaded audio file
-app.post('/transcribe', upload.single('audio'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No audio file provided' });
-    }
-
-    const transcript = await unplayable.transcribeFile(req.file.path);
-    
-    res.json({ 
-      transcript,
-      filename: req.file.originalname 
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Record new audio
 app.post('/record', async (req, res) => {
   try {
@@ -443,27 +395,9 @@ program
       });
       
       console.log('✅ Recording completed!');
-      console.log('📝 Transcript:', result.transcript);
       console.log('🎵 Audio file:', result.audioFilePath);
     } catch (error) {
       console.error('❌ Recording failed:', error.message);
-      process.exit(1);
-    }
-  });
-
-program
-  .command('transcribe <file>')
-  .description('Transcribe audio file')
-  .action(async (file) => {
-    try {
-      const unplayable = await createUnplayable();
-      
-      console.log('🎯 Transcribing audio...');
-      const transcript = await unplayable.transcribeFile(file);
-      
-      console.log('📝 Transcript:', transcript);
-    } catch (error) {
-      console.error('❌ Transcription failed:', error.message);
       process.exit(1);
     }
   });

@@ -165,7 +165,7 @@ export class AudioProcessor {
                 this.logger?.info(`Temporary recording kept at: ${tempDir}`);
             }
 
-            this.logger?.info('✅ Recording and transcription completed successfully');
+            this.logger?.info('✅ Recording completed successfully');
             return {
                 audioFilePath: finalAudioPath,
                 cancelled: false,
@@ -472,8 +472,6 @@ export class AudioProcessor {
         } else {
             this.logger?.info('DRY RUN: Would start audio recording');
         }
-        this.logger?.info('DRY RUN: Would transcribe audio and return transcript');
-
         return {
             cancelled: false,
             metadata: {
