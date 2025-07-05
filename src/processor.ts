@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as path from 'path';
 import * as os from 'os';
-import { spawn, ChildProcess } from 'child_process';
 
 import {
     AudioProcessingOptions,
@@ -12,7 +11,8 @@ import {
     Logger
 } from './types';
 import {
-    AudioConfigurationError
+    AudioConfigurationError,
+    AudioRecordingError
 } from './error';
 import {
     detectBestAudioDevice,
@@ -22,6 +22,7 @@ import {
 } from './devices';
 import { validateAudioFile, validateAudioProcessingOptions } from './validation';
 import { createStorage, generateTimestampedFilename, generateUniqueFilename } from './util/storage';
+import { run } from './util/child';
 import { ConfigurationManager } from './configuration';
 
 /**
@@ -190,162 +191,41 @@ export class AudioProcessor {
 
         this.logger?.info(`🔴 Recording from device: [${audioDevice.audioDevice}] ${audioDevice.audioDeviceName}`);
         this.logger?.info(`⏱️ Maximum recording time: ${maxTime} seconds`);
-        this.logger?.info('⏹️ Press ENTER to finish recording, or Ctrl+C to cancel');
+        this.logger?.info('⏹️ Press Ctrl+C to stop recording early');
 
-        return new Promise((resolve, reject) => {
-            let isFinished = false;
-            let ffmpegProcess: ChildProcess | null = null;
+        try {
+            const ffmpegArgs = [
+                '-f', 'avfoundation',
+                '-i', `:${audioDevice.audioDevice}`,
+                '-t', maxTime.toString(),
+                '-acodec', 'pcm_s16le',
+                '-ar', '44100',
+                '-ac', '1',
+                '-y', // Overwrite output file
+                outputPath
+            ];
 
-            const cleanup = () => {
-                if (ffmpegProcess && !ffmpegProcess.killed) {
-                    ffmpegProcess.kill('SIGTERM');
-                    // Force kill after delay if needed
-                    setTimeout(() => {
-                        if (ffmpegProcess && !ffmpegProcess.killed) {
-                            ffmpegProcess.kill('SIGKILL');
-                        }
-                    }, 1000);
-                }
-            };
+            // Use configured ffmpeg path or default to 'ffmpeg'
+            const ffmpegPath = this.config?.get('ffmpeg')?.path || 'ffmpeg';
 
-            const handleInterrupt = () => {
-                if (isFinished) return;
-                isFinished = true;
+            const result = await run(ffmpegPath, ffmpegArgs, {
+                timeout: (maxTime + 10) * 1000, // Add 10 seconds buffer to the timeout
+                logger: this.logger,
+                captureStderr: true
+            });
 
-                this.logger?.info('❌ Recording cancelled by user');
-                cleanup();
-                resolve({ cancelled: true });
-            };
-
-            const handleEnter = () => {
-                if (isFinished) return;
-                isFinished = true;
-
-                this.logger?.info('✅ Recording finished by user');
-                cleanup();
-                // Let ffmpeg finish gracefully, then resolve
-                setTimeout(() => {
-                    resolve({ cancelled: false });
-                }, 500);
-            };
-
-            // Set up signal handlers
-            const originalSigintHandler = process.listeners('SIGINT').slice() as ((...args: any[]) => void)[];
-            const originalStdinHandlers = process.stdin.listeners('data').slice() as ((...args: any[]) => void)[];
-
-            process.on('SIGINT', handleInterrupt);
-
-            // Set up stdin for ENTER detection
-            if (process.stdin.isTTY) {
-                process.stdin.setRawMode(true);
-                process.stdin.resume();
-                process.stdin.setEncoding('utf8');
-
-                const stdinHandler = (key: string) => {
-                    if (key === '\r' || key === '\n') { // ENTER key
-                        handleEnter();
-                    } else if (key === '\u0003') { // Ctrl+C
-                        handleInterrupt();
-                    }
-                };
-
-                process.stdin.on('data', stdinHandler);
+            if (result.code !== 0) {
+                this.logger?.error(`FFmpeg exited with code ${result.code}: ${result.stderr}`);
+                throw new AudioRecordingError(`FFmpeg exited with code ${result.code}: ${result.stderr}`);
             }
 
-            try {
-                const ffmpegArgs = [
-                    '-f', 'avfoundation',
-                    '-i', `:${audioDevice.audioDevice}`,
-                    '-t', maxTime.toString(),
-                    '-acodec', 'pcm_s16le',
-                    '-ar', '44100',
-                    '-ac', '1',
-                    '-y', // Overwrite output file
-                    outputPath
-                ];
+            this.logger?.info(`✅ Recording completed: ${outputPath}`);
+            return { cancelled: false };
 
-                // Use configured ffmpeg path or default to 'ffmpeg'
-                const ffmpegPath = this.config?.get('ffmpeg')?.path || 'ffmpeg';
-
-                ffmpegProcess = spawn(ffmpegPath, ffmpegArgs, {
-                    stdio: ['pipe', 'pipe', 'pipe']
-                });
-
-                let stderr = '';
-
-                ffmpegProcess.stdout?.on('data', (_data: Buffer) => {
-                    // We don't need to store stdout for recording
-                });
-
-                ffmpegProcess.stderr?.on('data', (data: Buffer) => {
-                    stderr += data.toString();
-                });
-
-                ffmpegProcess.on('close', (code: number) => {
-                    if (isFinished) return;
-                    isFinished = true;
-
-                    // Restore original signal handlers
-                    process.removeAllListeners('SIGINT');
-                    originalSigintHandler.forEach(handler => process.on('SIGINT', handler));
-
-                    // Restore stdin
-                    if (process.stdin.isTTY) {
-                        process.stdin.removeAllListeners('data');
-                        originalStdinHandlers.forEach(handler => process.stdin.on('data', handler));
-                        process.stdin.setRawMode(false);
-                        process.stdin.pause();
-                    }
-
-                    if (code !== 0) {
-                        this.logger?.error(`FFmpeg exited with code ${code}: ${stderr}`);
-                        reject(new Error(`FFmpeg exited with code ${code}: ${stderr}`));
-                    } else {
-                        this.logger?.info(`✅ Recording completed: ${outputPath}`);
-                        resolve({ cancelled: false });
-                    }
-                });
-
-                ffmpegProcess.on('error', (error: any) => {
-                    if (isFinished) return;
-                    isFinished = true;
-
-                    // Restore original signal handlers
-                    process.removeAllListeners('SIGINT');
-                    originalSigintHandler.forEach(handler => process.on('SIGINT', handler));
-
-                    // Restore stdin
-                    if (process.stdin.isTTY) {
-                        process.stdin.removeAllListeners('data');
-                        originalStdinHandlers.forEach(handler => process.stdin.on('data', handler));
-                        process.stdin.setRawMode(false);
-                        process.stdin.pause();
-                    }
-
-                    this.logger?.error(`FFmpeg process error: ${error.message}`);
-                    reject(new Error(`FFmpeg process error: ${error.message}`));
-                });
-
-            } catch (error: any) {
-                if (isFinished) return;
-                isFinished = true;
-
-                // Restore original signal handlers
-                process.removeAllListeners('SIGINT');
-                originalSigintHandler.forEach(handler => process.on('SIGINT', handler));
-
-                // Restore stdin
-                if (process.stdin.isTTY) {
-                    process.stdin.removeAllListeners('data');
-                    originalStdinHandlers.forEach(handler => process.stdin.on('data', handler));
-                    process.stdin.setRawMode(false);
-                    process.stdin.pause();
-                }
-
-                this.logger?.error(`Recording failed: ${error.message}`);
-                reject(new Error(`Recording failed: ${error.message}`));
-            }
-        });
+        } catch (error: any) {
+            this.logger?.error(`Recording failed: ${error.message || 'undefined'}`);
+            throw new AudioRecordingError(`Audio recording failed: ${error.message || 'undefined'}`);
+        }
     }
 
 
