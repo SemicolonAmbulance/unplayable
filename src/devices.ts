@@ -361,7 +361,7 @@ export const testAudioDevice = async (deviceIndex: string, logger?: Logger): Pro
             '-'
         ], {
             logger,
-            timeout: 5000
+            timeout: 2000
         });
 
         logger?.debug(`Device ${deviceIndex} test: PASS`);
@@ -392,12 +392,21 @@ export const selectAudioDeviceInteractively = async (logger?: Logger): Promise<A
 
     // Test devices and show status
     logger.info('🔍 Testing audio devices...');
-    const deviceStatuses = await Promise.all(
+    const deviceTestResults = await Promise.allSettled(
         devices.map(async (device) => {
             const isWorking = await testAudioDevice(device.index, logger);
             return { ...device, isWorking };
         })
     );
+
+    const deviceStatuses = deviceTestResults.map((result, index) => {
+        if (result.status === 'fulfilled') {
+            return result.value;
+        } else {
+            logger?.debug(`Device ${devices[index].index} test failed: ${result.reason}`);
+            return { ...devices[index], isWorking: false };
+        }
+    });
 
     // Display devices with status
     deviceStatuses.forEach((device, i) => {
@@ -423,15 +432,60 @@ export const selectAudioDeviceInteractively = async (logger?: Logger): Promise<A
     logger.info('📋 Select an audio device by entering its number (1-' + devices.length + '):');
 
     return new Promise((resolve) => {
-        // Set up keyboard input
-        process.stdin.setRawMode(true);
+        // Check if stdin is a TTY (terminal)
+        const isInteractive = process.stdin.isTTY;
+
+        if (!isInteractive) {
+            logger.error('❌ Interactive device selection requires a TTY. Please run this command in a terminal.');
+            logger.error('💡 If you are running this in a script, consider using a non-interactive method or pre-configuring the device.');
+            resolve(null);
+            return;
+        }
+
+        // Set up keyboard input for interactive mode
+        let wasRawMode = false;
+        try {
+            if (process.stdin.setRawMode) {
+                wasRawMode = process.stdin.isRaw || false;
+                process.stdin.setRawMode(true);
+            }
+        } catch (error) {
+            logger.error('❌ Cannot set raw mode for input. Interactive selection may not work properly.');
+            logger.debug(`Raw mode error: ${error}`);
+        }
+
         process.stdin.resume();
         process.stdin.setEncoding('utf8');
 
+        // Clear any buffered input
+        process.stdin.pause();
+        process.stdin.resume();
+
+        // Small delay to ensure any buffered input is cleared
+        setTimeout(() => {
+            process.stdin.on('data', keyHandler);
+            process.stdout.write('📋 Select an audio device: ');
+        }, 100);
+
         let inputBuffer = '';
+
+        const cleanup = () => {
+            try {
+                if (process.stdin.setRawMode) {
+                    process.stdin.setRawMode(wasRawMode);
+                }
+            } catch (error) {
+                logger.debug(`Error restoring raw mode: ${error}`);
+            }
+            process.stdin.pause();
+            process.stdin.removeListener('data', keyHandler);
+        };
 
         const keyHandler = (key: string) => {
             const keyCode = key.charCodeAt(0);
+
+            // Debug logging
+            logger.debug(`Received key: "${key}" (code: ${keyCode})`);
 
             if (keyCode === 13) { // ENTER key
                 const selectedIndex = parseInt(inputBuffer) - 1;
@@ -449,9 +503,7 @@ export const selectAudioDeviceInteractively = async (logger?: Logger): Promise<A
                     }
 
                     // Cleanup and resolve
-                    process.stdin.setRawMode(false);
-                    process.stdin.pause();
-                    process.stdin.removeListener('data', keyHandler);
+                    cleanup();
                     resolve(selectedDevice);
                 } else {
                     logger.error('❌ Invalid selection. Please enter a number between 1 and ' + devices.length);
@@ -460,9 +512,7 @@ export const selectAudioDeviceInteractively = async (logger?: Logger): Promise<A
                 }
             } else if (keyCode === 3) { // Ctrl+C
                 logger.info('\n❌ Selection cancelled');
-                process.stdin.setRawMode(false);
-                process.stdin.pause();
-                process.stdin.removeListener('data', keyHandler);
+                cleanup();
                 resolve(null);
             } else if (keyCode >= 48 && keyCode <= 57) { // Numbers 0-9
                 inputBuffer += key;
@@ -474,9 +524,6 @@ export const selectAudioDeviceInteractively = async (logger?: Logger): Promise<A
                 }
             }
         };
-
-        process.stdin.on('data', keyHandler);
-        process.stdout.write('📋 Select an audio device: ');
     });
 };
 
