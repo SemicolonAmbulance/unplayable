@@ -1,6 +1,6 @@
 {
     "name": "@theunwalked/unplayable",
-    "version": "0.0.14",
+    "version": "0.0.18",
     "description": "A cross-platform audio recording and processing library",
     "type": "module",
     "main": "./dist/unplayable.cjs",
@@ -43,8 +43,6 @@
     "keywords": [
         "audio",
         "recording",
-        "transcription",
-        "speech-to-text",
         "microphone",
         "ffmpeg",
         "cross-platform"

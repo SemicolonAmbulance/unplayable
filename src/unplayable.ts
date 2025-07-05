@@ -52,12 +52,11 @@ export class Unplayable {
     }
 
     /**
-     * Record audio only (without transcription)
+     * Record audio only
      */
     async recordAudio(options: Partial<AudioProcessingOptions> = {}): Promise<string> {
         const result = await this.processAudio({
             ...options,
-            // TODO: Add option to skip transcription
         });
 
         if (result.cancelled || !result.audioFilePath) {

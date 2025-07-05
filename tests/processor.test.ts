@@ -161,7 +161,6 @@ describe('AudioProcessor', () => {
                     }
                 });
                 expect(mockLogger.info).toHaveBeenCalledWith('DRY RUN: Would process audio file: /test/audio.wav');
-                expect(mockLogger.info).toHaveBeenCalledWith('DRY RUN: Would transcribe audio and return transcript');
             });
 
             it('should handle dry run for recording', async () => {
@@ -179,7 +178,6 @@ describe('AudioProcessor', () => {
                     }
                 });
                 expect(mockLogger.info).toHaveBeenCalledWith('DRY RUN: Would start audio recording');
-                expect(mockLogger.info).toHaveBeenCalledWith('DRY RUN: Would transcribe audio and return transcript');
             });
         });
 
@@ -193,7 +191,6 @@ describe('AudioProcessor', () => {
                 const mockStats = { size: 1024 };
                 mockStorage.getFileStats.mockResolvedValue(mockStats);
                 validateAudioFile.mockResolvedValue(undefined);
-                generateUniqueFilename.mockResolvedValue('/test/output/audio-transcript.txt');
 
                 const result = await processor.processAudio(options);
 
@@ -702,7 +699,7 @@ describe('AudioProcessor', () => {
             expect(mockLogger.info).toHaveBeenCalledWith('🎙️ Starting audio recording...');
             expect(mockLogger.info).toHaveBeenCalledWith('🔴 Recording from device: [1] Device 1');
             expect(mockLogger.info).toHaveBeenCalledWith('⏹️ Press Ctrl+C to stop recording early');
-            expect(mockLogger.info).toHaveBeenCalledWith('✅ Recording and transcription completed successfully');
+            expect(mockLogger.info).toHaveBeenCalledWith('✅ Recording completed successfully');
             expect(recordAudioSpy).toHaveBeenCalled();
         });
     });
