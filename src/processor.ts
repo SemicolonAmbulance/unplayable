@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import * as path from 'path';
 import * as os from 'os';
+import { spawn } from 'child_process';
 
 import {
     AudioProcessingOptions,
@@ -191,7 +192,15 @@ export class AudioProcessor {
 
         this.logger?.info(`🔴 Recording from device: [${audioDevice.audioDevice}] ${audioDevice.audioDeviceName}`);
         this.logger?.info(`⏱️ Maximum recording time: ${maxTime} seconds`);
-        this.logger?.info('⏹️ Press Ctrl+C to stop recording early');
+
+        // Check if we need to enable key handling
+        const enableKeyHandling = this.shouldEnableKeyHandling();
+
+        if (enableKeyHandling) {
+            this.logger?.info('⏹️ Press ENTER to stop recording or C to cancel');
+        } else {
+            this.logger?.info('⏹️ Press Ctrl+C to stop recording early');
+        }
 
         try {
             const ffmpegArgs = [
@@ -208,19 +217,23 @@ export class AudioProcessor {
             // Use configured ffmpeg path or default to 'ffmpeg'
             const ffmpegPath = this.config?.get('ffmpeg')?.path || 'ffmpeg';
 
-            const result = await run(ffmpegPath, ffmpegArgs, {
-                timeout: (maxTime + 10) * 1000, // Add 10 seconds buffer to the timeout
-                logger: this.logger,
-                captureStderr: true
-            });
+            if (enableKeyHandling) {
+                return await this.recordWithKeyHandling(ffmpegPath, ffmpegArgs, maxTime);
+            } else {
+                const result = await run(ffmpegPath, ffmpegArgs, {
+                    timeout: (maxTime + 10) * 1000, // Add 10 seconds buffer to the timeout
+                    logger: this.logger,
+                    captureStderr: true
+                });
 
-            if (result.code !== 0) {
-                this.logger?.error(`FFmpeg exited with code ${result.code}: ${result.stderr}`);
-                throw new AudioRecordingError(`FFmpeg exited with code ${result.code}: ${result.stderr}`);
+                if (result.code !== 0) {
+                    this.logger?.error(`FFmpeg exited with code ${result.code}: ${result.stderr}`);
+                    throw new AudioRecordingError(`FFmpeg exited with code ${result.code}: ${result.stderr}`);
+                }
+
+                this.logger?.info(`✅ Recording completed: ${outputPath}`);
+                return { cancelled: false };
             }
-
-            this.logger?.info(`✅ Recording completed: ${outputPath}`);
-            return { cancelled: false };
 
         } catch (error: any) {
             this.logger?.error(`Recording failed: ${error.message || 'undefined'}`);
@@ -228,6 +241,162 @@ export class AudioProcessor {
         }
     }
 
+    /**
+     * Record audio with custom key handling
+     */
+    private async recordWithKeyHandling(ffmpegPath: string, ffmpegArgs: string[], maxTime: number): Promise<{ cancelled: boolean }> {
+
+        return new Promise((resolve, reject) => {
+            const child = spawn(ffmpegPath, ffmpegArgs, {
+                stdio: ['pipe', 'pipe', 'pipe']
+            });
+
+            let stderr = '';
+            let isFinished = false;
+            let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+            // Set up timeout
+            if (maxTime > 0) {
+                timeoutId = setTimeout(() => {
+                    if (!isFinished) {
+                        this.logger?.debug(`Recording reached maximum time of ${maxTime}s, stopping...`);
+                        child.kill('SIGTERM');
+                        setTimeout(() => {
+                            if (!child.killed) {
+                                child.kill('SIGKILL');
+                            }
+                        }, 5000);
+                    }
+                }, maxTime * 1000);
+            }
+
+            // Handle stdout
+            child.stdout?.on('data', (data: Buffer) => {
+                const text = data.toString();
+                this.logger?.debug(`ffmpeg stdout: ${text.trim()}`);
+            });
+
+            // Handle stderr
+            child.stderr?.on('data', (data: Buffer) => {
+                const text = data.toString();
+                stderr += text;
+                this.logger?.debug(`ffmpeg stderr: ${text.trim()}`);
+            });
+
+            // Set up keyboard input handling
+            // Enable raw mode to capture individual key presses
+            if (process.stdin.setRawMode) {
+                process.stdin.setRawMode(true);
+            }
+
+            process.stdin.resume();
+            process.stdin.setEncoding('utf8');
+
+            const keyHandler = (key: string) => {
+                if (isFinished) return;
+
+                if (key === '\r' || key === '\n') {
+                    // ENTER key pressed - stop recording
+                    this.logger?.info('⏹️ ENTER pressed - stopping recording...');
+                    isFinished = true;
+                    child.kill('SIGTERM');
+
+                    // Set a timeout to ensure we resolve even if the process doesn't exit cleanly
+                    setTimeout(() => {
+                        if (!child.killed) {
+                            child.kill('SIGKILL');
+                        }
+                        // Force resolution if the process still hasn't exited
+                        cleanup();
+                        this.logger?.info('✅ Recording stopped successfully');
+                        resolve({ cancelled: false });
+                    }, 1000);
+                } else if (key.toLowerCase() === 'c') {
+                    // C key pressed - cancel recording
+                    this.logger?.info('❌ C pressed - cancelling recording...');
+                    isFinished = true;
+                    child.kill('SIGTERM');
+                    setTimeout(() => {
+                        if (!child.killed) {
+                            child.kill('SIGKILL');
+                        }
+                    }, 1000);
+
+                    // Clean up and return cancelled
+                    cleanup();
+                    resolve({ cancelled: true });
+                    return;
+                } else if (key === '\u0003') {
+                    // Ctrl+C pressed - also cancel
+                    this.logger?.info('❌ Ctrl+C pressed - cancelling recording...');
+                    isFinished = true;
+                    child.kill('SIGTERM');
+                    setTimeout(() => {
+                        if (!child.killed) {
+                            child.kill('SIGKILL');
+                        }
+                    }, 1000);
+
+                    // Clean up and return cancelled
+                    cleanup();
+                    resolve({ cancelled: true });
+                    return;
+                }
+            };
+
+            const cleanup = () => {
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                }
+
+                process.stdin.removeListener('data', keyHandler);
+                if (process.stdin.setRawMode) {
+                    process.stdin.setRawMode(false);
+                }
+                process.stdin.pause();
+            };
+
+            process.stdin.on('data', keyHandler);
+
+            // Handle process completion
+            child.on('close', (code: number | null, signal: string | null) => {
+                if (isFinished) return;
+                isFinished = true;
+
+                cleanup();
+
+                this.logger?.debug(`FFmpeg process exited with code ${code}, signal ${signal}`);
+
+                if (code !== 0) {
+                    this.logger?.error(`FFmpeg exited with code ${code}: ${stderr}`);
+                    reject(new AudioRecordingError(`FFmpeg exited with code ${code}: ${stderr}`));
+                } else {
+                    this.logger?.info(`✅ Recording completed successfully`);
+                    resolve({ cancelled: false });
+                }
+            });
+
+            // Handle process errors
+            child.on('error', (error: Error) => {
+                if (isFinished) return;
+                isFinished = true;
+
+                cleanup();
+
+                this.logger?.error(`FFmpeg process error: ${error.message}`);
+                reject(new Error(`Failed to execute FFmpeg: ${error.message}`));
+            });
+        });
+    }
+
+    /**
+     * Check if key handling should be enabled based on current options
+     */
+    private shouldEnableKeyHandling(): boolean {
+        // For now, we'll enable key handling by default during recording
+        // This can be made configurable through AudioProcessingOptions in the future
+        return true;
+    }
 
     /**
      * Get audio device configuration
