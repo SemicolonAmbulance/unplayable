@@ -49,6 +49,8 @@ export interface AudioProcessingOptions {
     keepTemp?: boolean;
     /** Custom logger implementation */
     logger?: Logger;
+    /** Enable custom key handling (ENTER to stop, C to cancel) */
+    enableKeyHandling?: boolean;
 }
 
 /**
@@ -164,6 +166,7 @@ export const AudioProcessingOptionsSchema = z.object({
     debug: z.boolean().default(false),
     dryRun: z.boolean().default(false),
     keepTemp: z.boolean().default(false),
+    enableKeyHandling: z.boolean().optional(),
 });
 
 export const UnplayableConfigSchema = z.object({
