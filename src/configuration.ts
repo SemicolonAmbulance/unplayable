@@ -12,9 +12,6 @@ import { createStorage } from './util/storage';
 export const DEFAULT_CONFIG: UnplayableConfig = {
     outputDirectory: path.join(os.homedir(), 'unplayable-recordings'),
     preferencesDirectory: path.join(os.homedir(), '.unplayable'),
-    openai: {
-        model: 'whisper-1'
-    },
     logging: {
         level: 'info',
         silent: false
@@ -168,10 +165,6 @@ export class ConfigurationManager {
         return {
             ...DEFAULT_CONFIG,
             ...config,
-            openai: {
-                ...DEFAULT_CONFIG.openai,
-                ...config.openai
-            },
             logging: {
                 ...DEFAULT_CONFIG.logging,
                 ...config.logging
@@ -204,53 +197,11 @@ export class ConfigurationManager {
     }
 
     /**
-     * Validate OpenAI configuration
-     */
-    validateOpenAIConfig(): boolean {
-        if (!this.config.openai?.apiKey) {
-            return false;
-        }
-
-        const apiKey = this.config.openai.apiKey;
-        if (typeof apiKey !== 'string' || apiKey.length < 10) {
-            return false;
-        }
-
-        if (!apiKey.startsWith('sk-')) {
-            this.logger?.warn('OpenAI API key does not start with "sk-", this may be incorrect');
-        }
-
-        return true;
-    }
-
-    /**
      * Get environment-based configuration
      * Loads configuration from environment variables
      */
     loadFromEnvironment(): void {
         const envConfig: Partial<UnplayableConfig> = {};
-
-        // OpenAI configuration
-        if (process.env.OPENAI_API_KEY) {
-            envConfig.openai = {
-                ...this.config.openai,
-                apiKey: process.env.OPENAI_API_KEY
-            };
-        }
-
-        if (process.env.OPENAI_MODEL) {
-            envConfig.openai = {
-                ...envConfig.openai,
-                model: process.env.OPENAI_MODEL
-            };
-        }
-
-        if (process.env.OPENAI_BASE_URL) {
-            envConfig.openai = {
-                ...envConfig.openai,
-                baseURL: process.env.OPENAI_BASE_URL
-            };
-        }
 
         // Directory configuration
         if (process.env.UNPLAYABLE_OUTPUT_DIR) {
@@ -305,9 +256,6 @@ export class ConfigurationManager {
      */
     exportConfig(): string {
         const exportConfig = { ...this.config };
-        if (exportConfig.openai?.apiKey) {
-            exportConfig.openai.apiKey = exportConfig.openai.apiKey.slice(0, 8) + '...';
-        }
         return JSON.stringify(exportConfig, null, 2);
     }
 }
@@ -325,10 +273,10 @@ export const createConfiguration = (
 /**
  * Load configuration from various sources in order of precedence:
  * 1. Provided initial config
- * 2. Environment variables  
+ * 2. Environment variables
  * 3. Configuration files
  * 4. Defaults
- * 
+ *
  * @param initialConfig Initial configuration
  * @param logger Optional logger
  * @returns Promise resolving to ConfigurationManager
@@ -349,4 +297,4 @@ export const loadConfiguration = async (
     await configManager.ensureDirectories();
 
     return configManager;
-}; 
+};

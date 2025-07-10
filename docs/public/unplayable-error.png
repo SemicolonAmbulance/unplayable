@@ -1,1 +1,25 @@
- 
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="errorGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#dc2626;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#b91c1c;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#fef2f2" stroke="#dc2626" stroke-width="3"/>
+  
+  <!-- Error shield -->
+  <path d="M 100 40 L 130 60 L 130 130 L 100 150 L 70 130 L 70 60 Z" 
+        fill="url(#errorGradient)" stroke="#b91c1c" stroke-width="2"/>
+  
+  <!-- Exclamation mark -->
+  <rect x="95" y="75" width="10" height="35" rx="5" fill="#fef2f2"/>
+  <circle cx="100" cy="125" r="5" fill="#fef2f2"/>
+  
+  <!-- Error indicators around shield -->
+  <circle cx="60" cy="80" r="3" fill="#dc2626" opacity="0.7"/>
+  <circle cx="140" cy="80" r="3" fill="#dc2626" opacity="0.7"/>
+  <circle cx="60" cy="120" r="3" fill="#dc2626" opacity="0.7"/>
+  <circle cx="140" cy="120" r="3" fill="#dc2626" opacity="0.7"/>
+</svg> 

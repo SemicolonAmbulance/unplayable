@@ -33,14 +33,9 @@ export default defineConfig({
                 'util',
                 'process',
                 'readline',
-                'audify',
-                'openai',
                 'winston',
-                'shell-escape',
                 'glob',
-                'dotenv',
                 'zod',
-                'commander',
             ],
             output: {
                 globals: {
@@ -55,14 +50,9 @@ export default defineConfig({
                     'util': 'util',
                     'process': 'process',
                     'readline': 'readline',
-                    'audify': 'audify',
-                    'openai': 'openai',
                     'winston': 'winston',
-                    'shell-escape': 'shell-escape',
                     'glob': 'glob',
-                    'dotenv': 'dotenv',
                     'zod': 'zod',
-                    'commander': 'commander',
                 },
             },
         },
@@ -70,4 +60,4 @@ export default defineConfig({
         minify: false,
         sourcemap: true,
     },
-}); 
+});

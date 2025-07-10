@@ -291,48 +291,6 @@ interface UnplayableConfig {
 
 ## Integration Examples
 
-### Integration with React App
-
-```typescript
-import React, { useState } from 'react';
-import { createUnplayable, AudioProcessingResult } from '@theunwalked/unplayable';
-
-function AudioRecorder() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [result, setResult] = useState<AudioProcessingResult | null>(null);
-
-  const handleRecord = async () => {
-    setIsRecording(true);
-    try {
-      const unplayable = await createUnplayable();
-      const result = await unplayable.processAudio({
-        maxRecordingTime: 60
-      });
-      setResult(result);
-    } catch (error) {
-      console.error('Recording failed:', error);
-    } finally {
-      setIsRecording(false);
-    }
-  };
-
-  return (
-    <div>
-      <button onClick={handleRecord} disabled={isRecording}>
-        {isRecording ? 'Recording...' : 'Start Recording'}
-      </button>
-      
-      {result && (
-        <div>
-          <h3>Transcript:</h3>
-          <p>{result.transcript}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
 ### Integration with Express.js API
 
 ```typescript
@@ -363,64 +321,6 @@ app.post('/record', async (req, res) => {
 app.listen(3000, () => {
   console.log('Audio API server running on port 3000');
 });
-```
-
-### Integration with CLI Tool
-
-```typescript
-#!/usr/bin/env node
-import { Command } from 'commander';
-import { createUnplayable } from '@theunwalked/unplayable';
-
-const program = new Command();
-
-program
-  .name('audio-cli')
-  .description('Audio recording and transcription CLI')
-  .version('1.0.0');
-
-program
-  .command('record')
-  .description('Record audio')
-  .option('-t, --time <seconds>', 'Recording time in seconds', '60')
-  .option('-o, --output <directory>', 'Output directory', './recordings')
-  .action(async (options) => {
-    try {
-      const unplayable = await createUnplayable();
-      
-      console.log('🎙️ Starting recording...');
-      const result = await unplayable.processAudio({
-        maxRecordingTime: parseInt(options.time),
-        outputDirectory: options.output
-      });
-      
-      console.log('✅ Recording completed!');
-      console.log('🎵 Audio file:', result.audioFilePath);
-    } catch (error) {
-      console.error('❌ Recording failed:', error.message);
-      process.exit(1);
-    }
-  });
-
-program
-  .command('devices')
-  .description('List audio devices')
-  .action(async () => {
-    try {
-      const unplayable = await createUnplayable();
-      const devices = await unplayable.getAudioDevices();
-      
-      console.log('🎤 Available audio devices:');
-      devices.forEach(device => {
-        console.log(`  [${device.index}] ${device.name}`);
-      });
-    } catch (error) {
-      console.error('❌ Failed to list devices:', error.message);
-      process.exit(1);
-    }
-  });
-
-program.parse();
 ```
 
 ## Supported Audio Formats

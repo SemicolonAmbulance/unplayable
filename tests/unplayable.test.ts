@@ -122,7 +122,6 @@ vi.mock('../src/devices', () => {
 vi.mock('../src/processor', () => ({
     createAudioProcessor: vi.fn(() => ({
         processAudio: vi.fn().mockResolvedValue({
-            transcript: 'Test transcript',
             audioFilePath: '/path/to/audio.wav',
             cancelled: false,
             metadata: {
@@ -521,20 +520,6 @@ describe('Unplayable Library', () => {
             expect(() => unplayable.updateConfig({ logging: { level: 'debug' } })).not.toThrow();
         });
 
-        it('should export configuration with masked sensitive data', async () => {
-            const unplayable = await createUnplayable({
-                config: {
-                    openai: {
-                        apiKey: 'sk-1234567890abcdef'
-                    }
-                }
-            });
-
-            const exportedConfig = unplayable.exportConfig();
-            expect(typeof exportedConfig).toBe('string');
-            expect(() => JSON.parse(exportedConfig)).not.toThrow();
-        });
-
         it('should save configuration to specific file', async () => {
             const unplayable = await createUnplayable();
 
@@ -807,26 +792,6 @@ describe('Unplayable Library', () => {
             expect(unplayable.isSupportedAudioFile('file[with]brackets.m4a')).toBe(true);
         });
 
-        it('should handle configuration updates with nested objects', async () => {
-            const unplayable = await createUnplayable();
-
-            // Test updating nested configuration
-            unplayable.updateConfig({
-                openai: {
-                    apiKey: 'test-key',
-                    model: 'gpt-4'
-                },
-                logging: {
-                    level: 'debug'
-                }
-            });
-
-            // Since config updates are mocked, we just verify it doesn't throw
-            expect(() => unplayable.updateConfig({
-                openai: { apiKey: 'new-key' }
-            })).not.toThrow();
-        });
-
         it('should handle edge case where config methods return undefined', async () => {
             // Test configuration edge cases
             const configMock = await import('../src/configuration');
@@ -846,4 +811,4 @@ describe('Unplayable Library', () => {
             expect(result).toBeDefined();
         });
     });
-}); 
+});
