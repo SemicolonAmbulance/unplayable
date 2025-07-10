@@ -1,1 +1,28 @@
- 
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="audioGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#dc2626;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#b91c1c;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#fef2f2" stroke="#dc2626" stroke-width="3"/>
+  
+  <!-- Audio waveform -->
+  <rect x="40" y="90" width="4" height="20" fill="url(#audioGradient)"/>
+  <rect x="50" y="70" width="4" height="60" fill="url(#audioGradient)"/>
+  <rect x="60" y="80" width="4" height="40" fill="url(#audioGradient)"/>
+  <rect x="70" y="60" width="4" height="80" fill="url(#audioGradient)"/>
+  <rect x="80" y="85" width="4" height="30" fill="url(#audioGradient)"/>
+  <rect x="90" y="75" width="4" height="50" fill="url(#audioGradient)"/>
+  <rect x="100" y="65" width="4" height="70" fill="url(#audioGradient)"/>
+  <rect x="110" y="75" width="4" height="50" fill="url(#audioGradient)"/>
+  <rect x="120" y="85" width="4" height="30" fill="url(#audioGradient)"/>
+  <rect x="130" y="70" width="4" height="60" fill="url(#audioGradient)"/>
+  <rect x="140" y="80" width="4" height="40" fill="url(#audioGradient)"/>
+  <rect x="150" y="90" width="4" height="20" fill="url(#audioGradient)"/>
+  
+  <!-- Format indicators -->
+  <text x="100" y="160" text-anchor="middle" font-family="monospace" font-size="12" fill="#dc2626">MP3 WAV FLAC</text>
+</svg> 

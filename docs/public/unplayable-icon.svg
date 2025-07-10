@@ -1,1 +1,35 @@
- 
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="micGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#dc2626;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#b91c1c;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#dc2626;stop-opacity:0.8" />
+      <stop offset="50%" style="stop-color:#f87171;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#dc2626;stop-opacity:0.8" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="100" cy="100" r="95" fill="#fef2f2" stroke="#dc2626" stroke-width="3"/>
+  
+  <!-- Microphone body -->
+  <rect x="85" y="60" width="30" height="50" rx="15" fill="url(#micGradient)"/>
+  
+  <!-- Microphone stand -->
+  <rect x="97" y="110" width="6" height="30" fill="#6b7280"/>
+  <rect x="85" y="135" width="30" height="5" rx="2.5" fill="#6b7280"/>
+  
+  <!-- Sound waves -->
+  <path d="M 120 75 Q 135 75 135 100 Q 135 125 120 125" 
+        stroke="url(#waveGradient)" stroke-width="3" fill="none"/>
+  <path d="M 125 70 Q 145 70 145 100 Q 145 130 125 130" 
+        stroke="url(#waveGradient)" stroke-width="2" fill="none"/>
+  <path d="M 130 65 Q 155 65 155 100 Q 155 135 130 135" 
+        stroke="url(#waveGradient)" stroke-width="2" fill="none"/>
+  
+  <!-- Crossed out symbol (representing "unplayable") -->
+  <line x1="65" y1="65" x2="135" y2="135" stroke="#dc2626" stroke-width="4" opacity="0.7"/>
+  <line x1="135" y1="65" x2="65" y2="135" stroke="#dc2626" stroke-width="4" opacity="0.7"/>
+</svg> 

@@ -103,12 +103,6 @@ export interface UnplayableConfig {
     outputDirectory?: string;
     /** Default preferences directory */
     preferencesDirectory?: string;
-    /** OpenAI API configuration for transcription */
-    openai?: {
-        apiKey?: string;
-        model?: string;
-        baseURL?: string;
-    };
     /** Logging configuration */
     logging?: {
         level?: 'error' | 'warn' | 'info' | 'debug';
@@ -196,4 +190,4 @@ export interface UnplayableFactoryOptions {
     config?: Partial<UnplayableConfig>;
     /** Custom logger instance */
     logger?: Logger;
-} 
+}

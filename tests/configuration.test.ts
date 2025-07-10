@@ -80,9 +80,6 @@ describe('Configuration', () => {
             expect(DEFAULT_CONFIG).toEqual({
                 outputDirectory: path.join(os.homedir(), 'unplayable-recordings'),
                 preferencesDirectory: path.join(os.homedir(), '.unplayable'),
-                openai: {
-                    model: 'whisper-1'
-                },
                 logging: {
                     level: 'info',
                     silent: false
@@ -113,8 +110,6 @@ describe('Configuration', () => {
                 const config = manager.getConfig();
 
                 expect(config.outputDirectory).toBe('/custom/output');
-                expect(config.openai!.apiKey).toBe('test-key');
-                expect(config.openai!.model).toBe('whisper-1'); // Should keep default
                 expect(config.logging).toEqual(DEFAULT_CONFIG.logging);
             });
 
@@ -172,19 +167,6 @@ describe('Configuration', () => {
                 expect(AudioConfigurationError.invalidConfig).toHaveBeenCalledWith('validation', 'Invalid update');
             });
 
-            it('should deep merge nested objects', () => {
-                const manager = new ConfigurationManager({
-                    openai: { apiKey: 'original-key', model: 'whisper-1' }
-                });
-
-                manager.updateConfig({
-                    openai: { apiKey: 'new-key' }
-                });
-
-                const config = manager.getConfig();
-                expect(config.openai!.apiKey).toBe('new-key');
-                expect(config.openai!.model).toBe('whisper-1'); // Should preserve existing
-            });
         });
 
         describe('resetToDefaults', () => {
@@ -385,64 +367,7 @@ describe('Configuration', () => {
             });
         });
 
-        describe('validateOpenAIConfig', () => {
-            it('should return false when no API key is configured', () => {
-                const manager = new ConfigurationManager({});
-
-                expect(manager.validateOpenAIConfig()).toBe(false);
-            });
-
-            it('should return false when API key is not a string', () => {
-                const manager = new ConfigurationManager({
-                    openai: { apiKey: null as any }
-                });
-
-                expect(manager.validateOpenAIConfig()).toBe(false);
-            });
-
-            it('should return false when API key is too short', () => {
-                const manager = new ConfigurationManager({
-                    openai: { apiKey: 'short' }
-                });
-
-                expect(manager.validateOpenAIConfig()).toBe(false);
-            });
-
-            it('should return true for valid API key starting with sk-', () => {
-                const manager = new ConfigurationManager({
-                    openai: { apiKey: 'sk-1234567890abcdef' }
-                });
-
-                expect(manager.validateOpenAIConfig()).toBe(true);
-            });
-
-            it('should warn for API key not starting with sk-', () => {
-                const manager = new ConfigurationManager({
-                    openai: { apiKey: 'invalid-1234567890' }
-                }, mockLogger);
-
-                const result = manager.validateOpenAIConfig();
-
-                expect(result).toBe(true); // Still valid, just warns
-                expect(mockLogger.warn).toHaveBeenCalledWith('OpenAI API key does not start with "sk-", this may be incorrect');
-            });
-        });
-
         describe('loadFromEnvironment', () => {
-            it('should load OpenAI configuration from environment', () => {
-                process.env.OPENAI_API_KEY = 'sk-env-key';
-                process.env.OPENAI_MODEL = 'whisper-2';
-                process.env.OPENAI_BASE_URL = 'https://api.custom.com';
-
-                const manager = new ConfigurationManager({}, mockLogger);
-                manager.loadFromEnvironment();
-
-                const config = manager.getConfig();
-                expect(config.openai?.apiKey).toBe('sk-env-key');
-                expect(config.openai?.model).toBe('whisper-2');
-                expect(config.openai?.baseURL).toBe('https://api.custom.com');
-                expect(mockLogger.debug).toHaveBeenCalledWith('Configuration loaded from environment variables');
-            });
 
             it('should load directory configuration from environment', () => {
                 process.env.UNPLAYABLE_OUTPUT_DIR = '/env/output';
@@ -501,33 +426,18 @@ describe('Configuration', () => {
                 expect(config.outputDirectory).toBe('/original');
             });
 
-            it('should merge environment config with existing openai config', () => {
-                process.env.OPENAI_API_KEY = 'sk-env-key';
-
-                const manager = new ConfigurationManager({
-                    openai: { model: 'custom-model' }
-                });
-
-                manager.loadFromEnvironment();
-
-                const config = manager.getConfig();
-                expect(config.openai?.apiKey).toBe('sk-env-key');
-                expect(config.openai?.model).toBe('custom-model');
-            });
         });
 
         describe('exportConfig', () => {
             it('should export configuration with masked API key', () => {
                 const manager = new ConfigurationManager({
                     outputDirectory: '/test',
-                    openai: { apiKey: 'sk-1234567890abcdef' }
                 });
 
                 const exported = manager.exportConfig();
                 const parsed = JSON.parse(exported);
 
                 expect(parsed.outputDirectory).toBe('/test');
-                expect(parsed.openai.apiKey).toBe('sk-12345...');
             });
 
             it('should export configuration without API key if not set', () => {
@@ -572,7 +482,6 @@ describe('Configuration', () => {
             const manager = await loadConfiguration({ logging: { level: 'debug' } }, mockLogger);
 
             const config = manager.getConfig();
-            expect(config.openai?.apiKey).toBe('sk-env-key'); // Environment preserved in file
             expect(config.outputDirectory).toBe('/file/output'); // File
 
             expect(mockStorage.ensureDirectory).toHaveBeenCalled();
